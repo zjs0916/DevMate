@@ -12,6 +12,8 @@ class ModelConfig:
     api_key: str
     model_name: str
     embedding_model_name: str
+    embedding_provider: str
+    embedding_dimensions: int
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,8 @@ def _load_model_config(data: dict[str, Any]) -> ModelConfig:
         api_key=model["api_key"],
         model_name=model["model_name"],
         embedding_model_name=model["embedding_model_name"],
+        embedding_provider=model.get("embedding_provider", "openai"),
+        embedding_dimensions=model.get("embedding_dimensions", 1536),
     )
 
 
