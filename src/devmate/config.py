@@ -31,11 +31,19 @@ class SkillsConfig:
 
 
 @dataclass(frozen=True)
+class MCPConfig:
+    host: str
+    port: int
+    endpoint: str
+
+
+@dataclass(frozen=True)
 class AppConfig:
     model: ModelConfig
     search: SearchConfig
     langsmith: LangSmithConfig
     skills: SkillsConfig
+    mcp: MCPConfig
 
 
 def load_config(config_path: str | Path = "config.toml") -> AppConfig:
@@ -49,6 +57,7 @@ def load_config(config_path: str | Path = "config.toml") -> AppConfig:
         search=_load_search_config(data),
         langsmith=_load_langsmith_config(data),
         skills=_load_skills_config(data),
+        mcp=_load_mcp_config(data),
     )
 
 
@@ -85,4 +94,14 @@ def _load_skills_config(data: dict[str, Any]) -> SkillsConfig:
 
     return SkillsConfig(
         skills_dir=skills.get("skills_dir", ".skills"),
+    )
+
+
+def _load_mcp_config(data: dict[str, Any]) -> MCPConfig:
+    mcp = data.get("mcp", {})
+
+    return MCPConfig(
+        host=mcp.get("host", "127.0.0.1"),
+        port=mcp.get("port", 8000),
+        endpoint=mcp.get("endpoint", "/mcp"),
     )
