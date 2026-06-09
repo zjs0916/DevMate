@@ -6,3 +6,4 @@ config.local.toml
 .chroma/
 .skills/cache/
 .DS_Store
+generated_projects/

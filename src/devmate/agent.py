@@ -14,6 +14,7 @@ from devmate.mcp_client import load_mcp_tools
 from devmate.model import configure_langsmith
 from devmate.model import create_chat_model
 from devmate.rag import search_knowledge_base
+from devmate.skills import create_skill_tools
 
 SYSTEM_PROMPT = """
 You are DevMate, an AI coding assistant.
@@ -34,6 +35,8 @@ Tool usage rules:
 - Use the local knowledge base when the request may relate to project
   guidelines, templates, or internal documentation.
 - Use file tools to actually create project files in generated_projects.
+- Search saved skills before solving repeatable coding tasks.
+- Save a useful skill after completing a repeatable task pattern.
 - Before generating files, explain the file plan briefly.
 - After writing files, summarize what was created and how to run it.
 
@@ -63,6 +66,7 @@ async def create_devmate_agent(config: AppConfig) -> Any:
     local_tools = [
         create_knowledge_base_tool(config),
         *create_file_tools(),
+        *create_skill_tools(config),
     ]
     tools = [*local_tools, *mcp_tools]
 
