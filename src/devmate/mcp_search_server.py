@@ -56,6 +56,8 @@ def main() -> None:
         transport="http",
         host=config.mcp.host,
         port=config.mcp.port,
+        path=config.mcp.endpoint,
+        log_level="debug",
     )
 
 
