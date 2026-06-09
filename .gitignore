@@ -5,3 +5,4 @@ __pycache__/
 config.local.toml
 .chroma/
 .skills/cache/
+.DS_Store
