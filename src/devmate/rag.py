@@ -8,6 +8,8 @@ from langchain_core.documents import Document
 from devmate.config import AppConfig
 from devmate.model import create_embedding_model
 
+import chromadb
+
 COLLECTION_NAME = "devmate_docs"
 SUPPORTED_SUFFIXES = {".md", ".txt"}
 
@@ -85,12 +87,13 @@ def build_knowledge_base(
         raise ValueError(message)
 
     embedding_model = create_embedding_model(config)
+    client = chromadb.PersistentClient(path=str(persist_dir))
 
     return Chroma.from_documents(
         documents=documents,
         embedding=embedding_model,
         collection_name=COLLECTION_NAME,
-        persist_directory=str(persist_dir),
+        client=client,
     )
 
 
@@ -99,11 +102,12 @@ def load_knowledge_base(
     persist_dir: str | Path = ".chroma",
 ) -> Chroma:
     embedding_model = create_embedding_model(config)
+    client = chromadb.PersistentClient(path=str(persist_dir))
 
     return Chroma(
         collection_name=COLLECTION_NAME,
         embedding_function=embedding_model,
-        persist_directory=str(persist_dir),
+        client=client,
     )
 
 
