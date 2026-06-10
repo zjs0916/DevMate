@@ -346,3 +346,17 @@ LangSmith Trace 应能展示：
 ```
 
 运行后，DevMate 会生成一个多文件 Web 项目，并写入 `generated_projects/`。
+
+## LangSmith Trace
+
+端到端测试 Trace：
+
+- Hiking website generation trace: https://smith.langchain.com/public/70d6b0ac-86e3-425a-8d73-dc57aa917d0d/r
+
+该 Trace 用于证明 Agent 端到端运行成功，并包含：
+- Agent 对话流程
+- LLM 调用
+- MCP `search_web` 工具调用
+- Tavily 搜索结果
+- RAG / 本地知识库检索
+- 文件生成相关步骤
