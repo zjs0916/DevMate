@@ -445,3 +445,28 @@ RAG returned local knowledge base results successfully, including source metadat
 ```
 
 该测试证明 DevMate 可以索引本地文档，并通过 `search_knowledge_base` 完成本地知识库检索。
+
+## End-to-End Hiking Website Test
+
+已完成“附近徒步路线网站”端到端生成测试。
+
+测试输入：
+
+```text
+请构建一个展示附近徒步路线的网站项目，必须实际创建项目文件，使用 uv，不要使用 requirements.txt。
+```
+
+测试结果：
+
+```text
+DevMate successfully generated a multi-file hiking routes website project under generated_projects/.
+The generated output includes Python application code, pyproject.toml, README documentation, templates, and static web assets where applicable.
+```
+
+由于 `generated_projects/` 是运行产物并被 `.gitignore` 排除，端到端测试证据已记录在：
+
+```text
+docs/e2e_hiking_website_test.md
+```
+
+该测试证明 Agent 可以完成从用户自然语言需求到实际项目文件生成的端到端流程。
