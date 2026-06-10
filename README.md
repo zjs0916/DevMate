@@ -470,3 +470,28 @@ docs/e2e_hiking_website_test.md
 ```
 
 该测试证明 Agent 可以完成从用户自然语言需求到实际项目文件生成的端到端流程。
+
+## Docker Compose Test
+
+已完成 Docker Compose 构建与运行测试。
+
+测试内容：
+
+- `docker compose up --build -d` 可以成功构建并启动服务。
+- `mcp-search` 服务可以在 Docker Compose 环境中运行。
+- `index-docs` 可以在 Docker Compose 环境中完成本地文档索引。
+- `devmate` 服务可以通过 `docker compose run --rm devmate uv run python -m devmate.main ...` 在容器内运行 Agent。
+
+测试结果：
+
+```text
+Docker Compose build and run completed successfully. The Agent was tested successfully inside the container environment using uv run.
+```
+
+测试证据已记录在：
+
+```text
+docs/docker_compose_test.md
+```
+
+该测试证明 DevMate 可以通过 Docker Compose 完成容器化构建与运行。
