@@ -155,6 +155,8 @@ generated_projects/
 
 ## Docker 运行方式
 
+> 注意：Docker 构建或运行时需要从 Docker Hub / GitHub / 模型服务 / Tavily 等外部服务下载或请求数据。如果遇到 `connection reset by peer`、镜像拉取失败、API 连接失败等网络错误，可以尝试打开 VPN / 代理后重新运行 Docker 命令。
+
 ### 1. 准备环境变量
 
 复制环境变量模板：
