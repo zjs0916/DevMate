@@ -139,6 +139,8 @@ DEVMATE_CONFIG=config.local.toml PYTHONPATH=src uv run python -m devmate.mcp_sea
 
 ### 4. 运行 DevMate Agent
 
+> 注意：本地运行 DevMate Agent 时，如果 MCP 连接出现 `502 Bad Gateway`，可能是 VPN / 代理影响了 `127.0.0.1` 或 `localhost`。请先关闭 VPN，或在 VPN / 代理设置中绕过 `127.0.0.1` 和 `localhost`。
+
 打开第二个终端：
 
 ```bash
