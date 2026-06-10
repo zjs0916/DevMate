@@ -376,3 +376,36 @@ All checks passed!
 ```
 
 该检查用于确认 `src/` 下 Python 代码符合基础代码规范要求。
+
+## MCP Search Test
+
+已完成 MCP Streamable HTTP 搜索工具测试。
+
+测试目标：
+
+- 验证 MCP Search Server 可以正常启动。
+- 验证 MCP Client 可以通过 Streamable HTTP 连接到 MCP Server。
+- 验证 Agent 可加载并调用 `search_web` 工具。
+- 验证 `search_web` 工具可以返回 Tavily Web Search 结果。
+
+测试环境：
+
+```text
+MCP URL: http://127.0.0.1:8765/mcp/
+Loaded MCP tools: search_web
+Search tool: search_web
+```
+
+测试查询：
+
+```text
+latest FastAPI project structure best practices
+```
+
+测试结果：
+
+```text
+Search result preview returned Tavily web search results successfully, including an answer, source URLs, snippets, and raw search result metadata.
+```
+
+该测试证明 DevMate 可以通过 MCP Streamable HTTP 调用网络搜索服务，并成功获取 Tavily 搜索结果。
