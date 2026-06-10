@@ -4,6 +4,12 @@
 Build a FastAPI-based web app with an interactive map (Leaflet.js) for displaying and filtering nearby hiking trails.
 
 ## Procedure
+# hiking-trails-web-app
+
+## Description
+Build a FastAPI-based web app with an interactive map (Leaflet.js) for displaying and filtering nearby hiking trails.
+
+## Procedure
 # FastAPI + Leaflet 徒步路线展示网站
 
 ## 说明
@@ -40,11 +46,20 @@ hiking-trails/
 
 ## 启动命令
 ```bash
+cd hiking-trails
 uv sync
 uv run python -m src.main
 ```
 
 ## API 设计
 - `GET /` — HTML 页面
-- `GET /api/trails?difficulty=moderate&search=云南&near_lat=27.18&near_lng=100.08&max_distance_km=500` — 过滤后的 JSON
+- `GET /api/trails?difficulty=moderate&search=大理&near_lat=25.5&near_lng=100.2&max_distance_km=200` — 过滤后的 JSON
 - `GET /api/trails/1` — 单条 JSON
+
+## 前端要点
+- Leaflet.js 开源地图，使用 OpenStreetMap 瓦片
+- 路线按难度着色（绿/黄/红）
+- 侧边栏卡片列表，支持点击高亮并平移地图
+- 浏览器 Geolocation API 定位
+- 带防抖的实时搜索
+- 响应式布局（移动端上下排列）
