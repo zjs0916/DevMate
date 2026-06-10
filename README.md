@@ -360,3 +360,19 @@ LangSmith Trace 应能展示：
 - Tavily 搜索结果
 - RAG / 本地知识库检索
 - 文件生成相关步骤
+
+## Code Quality Check
+
+已完成 Ruff / PEP 8 风格检查：
+
+```bash
+uv run ruff check src
+```
+
+检查结果：
+
+```text
+All checks passed!
+```
+
+该检查用于确认 `src/` 下 Python 代码符合基础代码规范要求。
