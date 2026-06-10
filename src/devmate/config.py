@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -67,12 +68,32 @@ def _load_model_config(data: dict[str, Any]) -> ModelConfig:
     model = data["model"]
 
     return ModelConfig(
-        ai_base_url=model["ai_base_url"],
-        api_key=model["api_key"],
-        model_name=model["model_name"],
-        embedding_model_name=model["embedding_model_name"],
-        embedding_provider=model.get("embedding_provider", "openai"),
-        embedding_dimensions=model.get("embedding_dimensions", 1536),
+        ai_base_url=_get_env_or_value(
+            "DEVMATE_MODEL_BASE_URL",
+            model["ai_base_url"],
+        ),
+        api_key=_get_env_or_value(
+            "DEVMATE_MODEL_API_KEY",
+            model["api_key"],
+        ),
+        model_name=_get_env_or_value(
+            "DEVMATE_MODEL_NAME",
+            model["model_name"],
+        ),
+        embedding_model_name=_get_env_or_value(
+            "DEVMATE_EMBEDDING_MODEL_NAME",
+            model["embedding_model_name"],
+        ),
+        embedding_provider=_get_env_or_value(
+            "DEVMATE_EMBEDDING_PROVIDER",
+            model.get("embedding_provider", "openai"),
+        ),
+        embedding_dimensions=int(
+            _get_env_or_value(
+                "DEVMATE_EMBEDDING_DIMENSIONS",
+                str(model.get("embedding_dimensions", 1536)),
+            ),
+        ),
     )
 
 
@@ -80,7 +101,10 @@ def _load_search_config(data: dict[str, Any]) -> SearchConfig:
     search = data["search"]
 
     return SearchConfig(
-        tavily_api_key=search["tavily_api_key"],
+        tavily_api_key=_get_env_or_value(
+            "DEVMATE_TAVILY_API_KEY",
+            search["tavily_api_key"],
+        ),
     )
 
 
@@ -88,8 +112,16 @@ def _load_langsmith_config(data: dict[str, Any]) -> LangSmithConfig:
     langsmith = data["langsmith"]
 
     return LangSmithConfig(
-        langchain_tracing_v2=langsmith["langchain_tracing_v2"],
-        langchain_api_key=langsmith["langchain_api_key"],
+        langchain_tracing_v2=_to_bool(
+            _get_env_or_value(
+                "DEVMATE_LANGCHAIN_TRACING_V2",
+                str(langsmith["langchain_tracing_v2"]),
+            ),
+        ),
+        langchain_api_key=_get_env_or_value(
+            "DEVMATE_LANGCHAIN_API_KEY",
+            langsmith["langchain_api_key"],
+        ),
     )
 
 
@@ -97,7 +129,10 @@ def _load_skills_config(data: dict[str, Any]) -> SkillsConfig:
     skills = data["skills"]
 
     return SkillsConfig(
-        skills_dir=skills.get("skills_dir", ".skills"),
+        skills_dir=_get_env_or_value(
+            "DEVMATE_SKILLS_DIR",
+            skills.get("skills_dir", ".skills"),
+        ),
     )
 
 
@@ -105,7 +140,26 @@ def _load_mcp_config(data: dict[str, Any]) -> MCPConfig:
     mcp = data.get("mcp", {})
 
     return MCPConfig(
-        host=mcp.get("host", "127.0.0.1"),
-        port=mcp.get("port", 8000),
-        endpoint=mcp.get("endpoint", "/mcp"),
+        host=_get_env_or_value(
+            "DEVMATE_MCP_HOST",
+            mcp.get("host", "127.0.0.1"),
+        ),
+        port=int(
+            _get_env_or_value(
+                "DEVMATE_MCP_PORT",
+                str(mcp.get("port", 8000)),
+            ),
+        ),
+        endpoint=_get_env_or_value(
+            "DEVMATE_MCP_ENDPOINT",
+            mcp.get("endpoint", "/mcp"),
+        ),
     )
+
+
+def _get_env_or_value(name: str, value: str) -> str:
+    return os.environ.get(name, value)
+
+
+def _to_bool(value: str) -> bool:
+    return value.lower() in {"1", "true", "yes", "on"}
