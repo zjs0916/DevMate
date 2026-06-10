@@ -27,7 +27,7 @@ Important project rules:
 - Do not recommend pip install -r requirements.txt.
 - Use pyproject.toml for Python dependencies.
 - Follow Python PEP 8.
-- Do not use print() in Python code; use logging instead.
+- Avoid Python print calls; use logging instead.
 - Prefer simple, readable project structures.
 
 Tool usage rules:
