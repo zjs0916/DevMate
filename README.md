@@ -409,3 +409,39 @@ Search result preview returned Tavily web search results successfully, including
 ```
 
 该测试证明 DevMate 可以通过 MCP Streamable HTTP 调用网络搜索服务，并成功获取 Tavily 搜索结果。
+
+## RAG Knowledge Base Test
+
+已完成本地知识库 RAG 检索测试。
+
+测试目标：
+
+- 验证 `docs/` 目录中的 markdown 文档可以被读取和切分。
+- 验证文档切片可以生成 embeddings 并写入本地 Chroma 向量库。
+- 验证 `search_knowledge_base` 可以根据查询返回本地知识库内容。
+
+索引命令：
+
+```bash
+PYTHONPATH=src uv run python -m devmate.index_docs --config config.local.toml --docs-dir docs --persist-dir .chroma
+```
+
+检索命令：
+
+```bash
+PYTHONPATH=src uv run python -c 'from devmate.config import load_config; from devmate.rag import search_knowledge_base; import sys; config = load_config("config.local.toml"); result = search_knowledge_base("project guidelines", config=config, persist_dir=".chroma", k=3); sys.stdout.write(result[:2000] + "\n")'
+```
+
+测试查询：
+
+```text
+project guidelines
+```
+
+测试结果：
+
+```text
+RAG returned local knowledge base results successfully, including source metadata from docs/internal_project_guidelines.md and relevant document content.
+```
+
+该测试证明 DevMate 可以索引本地文档，并通过 `search_knowledge_base` 完成本地知识库检索。
