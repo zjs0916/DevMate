@@ -8,57 +8,49 @@ from langchain_core.tools import tool
 
 from devmate.config import AppConfig
 
-SLUG_PATTERN = re.compile(r"[^a-zA-Z0-9_-]+")
+SLUG_PATTERN = re.compile(r"[^a-z0-9-]+")
 
 
 def create_skill_tools(config: AppConfig) -> list[BaseTool]:
+    """Create tools for saving, listing, reading, and searching standard Skills."""
+
     skills_dir = Path(config.skills.skills_dir)
 
     @tool("save_skill")
     def save_skill(name: str, description: str, content: str) -> str:
-        """Save a reusable task skill as a markdown file."""
-        skills_dir.mkdir(parents=True, exist_ok=True)
-        path = skills_dir / f"{_slugify(name)}.md"
+        """Save a reusable task pattern as a standard Agent Skill."""
+        slug = _slugify(name)
+        skill_dir = skills_dir / slug
+        skill_dir.mkdir(parents=True, exist_ok=True)
 
-        skill_text = (
-            f"# {name}\n\n"
-            f"## Description\n{description.strip()}\n\n"
-            f"## Procedure\n{content.strip()}\n"
+        skill_path = skill_dir / "SKILL.md"
+        skill_text = _format_skill_markdown(
+            name=slug,
+            description=description,
+            content=content,
         )
-
-        path.write_text(skill_text, encoding="utf-8")
-
-        return f"Saved skill: {path}"
+        skill_path.write_text(skill_text, encoding="utf-8")
+        return f"Saved standard skill: {skill_path}"
 
     @tool("list_skills")
     def list_skills() -> str:
-        """List available saved skills."""
-        if not skills_dir.exists():
-            return "No skills found."
-
-        paths = sorted(skills_dir.glob("*.md"))
-
+        """List available standard Agent Skills."""
+        paths = _skill_paths(skills_dir)
         if not paths:
             return "No skills found."
-
-        return "\n".join(path.stem for path in paths)
+        return "\n".join(path.parent.name for path in paths)
 
     @tool("read_skill")
     def read_skill(name: str) -> str:
-        """Read a saved skill by name."""
-        path = skills_dir / f"{_slugify(name)}.md"
-
-        if not path.exists():
+        """Read a standard Agent Skill by name."""
+        skill_path = skills_dir / _slugify(name) / "SKILL.md"
+        if not skill_path.exists():
             return f"Skill not found: {name}"
-
-        return path.read_text(encoding="utf-8")
+        return skill_path.read_text(encoding="utf-8")
 
     @tool("search_skills")
     def search_skills(query: str) -> str:
-        """Search saved skills for reusable task patterns."""
-        if not skills_dir.exists():
-            return "No skills found."
-
+        """Search standard Agent Skills for reusable task patterns."""
         query_terms = {
             term.lower()
             for term in re.findall(r"\w+", query)
@@ -66,22 +58,21 @@ def create_skill_tools(config: AppConfig) -> list[BaseTool]:
         }
 
         matches: list[str] = []
-
-        for path in sorted(skills_dir.glob("*.md")):
+        for path in _skill_paths(skills_dir):
             content = path.read_text(encoding="utf-8")
             content_lower = content.lower()
             score = sum(
-                1 for term in query_terms if term in content_lower
+                1
+                for term in query_terms
+                if term in content_lower
             )
-
             if score > 0:
                 matches.append(
-                    f"Skill: {path.stem}\n{content[:1000]}",
+                    f"Skill: {path.parent.name}\n{content[:1200]}",
                 )
 
         if not matches:
             return "No relevant skills found."
-
         return "\n\n---\n\n".join(matches)
 
     return [
@@ -92,10 +83,36 @@ def create_skill_tools(config: AppConfig) -> list[BaseTool]:
     ]
 
 
-def _slugify(name: str) -> str:
-    slug = SLUG_PATTERN.sub("-", name.strip()).strip("-").lower()
+def _skill_paths(skills_dir: Path) -> list[Path]:
+    if not skills_dir.exists():
+        return []
+    return sorted(skills_dir.glob("*/SKILL.md"))
 
+
+def _format_skill_markdown(
+    name: str,
+    description: str,
+    content: str,
+) -> str:
+    clean_description = _single_line(description)[:1024]
+    clean_content = content.strip()
+    return (
+        "---\n"
+        f"name: {name}\n"
+        f"description: {clean_description}\n"
+        "---\n\n"
+        f"# {name}\n\n"
+        "## Instructions\n\n"
+        f"{clean_content}\n"
+    )
+
+
+def _single_line(value: str) -> str:
+    return " ".join(value.strip().split())
+
+
+def _slugify(name: str) -> str:
+    slug = SLUG_PATTERN.sub("-", name.strip().lower()).strip("-")
     if not slug:
         return "untitled-skill"
-
-    return slug
+    return slug[:64]
