@@ -14,6 +14,13 @@ from devmate.config import load_config
 LOGGER = logging.getLogger(__name__)
 
 
+def configure_stdio() -> None:
+    """Force UTF-8 streams for Docker interactive sessions."""
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run DevMate AI coding assistant.",
@@ -37,6 +44,7 @@ def parse_args() -> argparse.Namespace:
 
 
 async def async_main() -> int:
+    configure_stdio()
     logging.basicConfig(level=logging.INFO)
 
     args = parse_args()
