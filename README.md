@@ -495,3 +495,29 @@ docs/docker_compose_test.md
 ```
 
 该测试证明 DevMate 可以通过 Docker Compose 完成容器化构建与运行。
+
+## Skills Save and Reuse Trace
+
+已完成 Agent Skills 保存与复用 LangSmith Trace 验证。
+
+Trace 链接：
+
+- Skills save trace: https://smith.langchain.com/public/eba3cdd6-2a34-4d40-9008-9f7df0b924b6/r
+- Skills search / read / reuse trace: https://smith.langchain.com/public/5cd351ff-1046-434a-9310-ec7046056372/r?scroll_to=output
+
+验证内容：
+
+- 第一轮 Trace 中可看到 Agent 调用 `save_skill` 工具，保存 `fastapi-healthcheck-api` Skill。
+- 第二轮 Trace 中可看到 Agent 调用 `search_skills` 和 `read_skill` 工具，检索并读取已保存的 Skill。
+- 第二轮基于复用的 Skill 生成 `generated_projects/healthcheck-api` 项目。
+- 本地验证确认 `.skills/fastapi-healthcheck-api/SKILL.md` 已生成。
+- 本地验证确认 `generated_projects/healthcheck-api/` 包含 `pyproject.toml`、`README.md` 和 `src/main.py`。
+
+本地验证结果：
+
+```text
+.skills/fastapi-healthcheck-api/SKILL.md
+generated_projects/healthcheck-api/README.md
+generated_projects/healthcheck-api/pyproject.toml
+generated_projects/healthcheck-api/src/__init__.py
+generated_projects/healthcheck-api/src/main.py
