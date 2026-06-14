@@ -14,9 +14,9 @@ services:
   devmate:
     build: .
     command: >
-      uv run python -m devmate.main
-      --config config.toml
-      "请构建一个展示附近徒步路线的网站项目，必须实际创建项目文件，使用 uv，不要使用 requirements.txt。"
+      uv run python -m devmate.main --config config.toml --interactive
+    stdin_open: true
+    tty: true
     depends_on:
       - mcp-search
     environment:
