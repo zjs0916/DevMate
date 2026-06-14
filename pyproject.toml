@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.5.9",
     "deepagents>=0.6.10",
+    "fastembed>=0.8.0",
     "fastmcp>=3.4.2",
     "langchain>=1.2.10",
     "langchain-chroma>=1.1.0",

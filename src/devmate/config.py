@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-import tomllib
 
 
 @dataclass(frozen=True)
@@ -12,6 +12,8 @@ class ModelConfig:
     ai_base_url: str
     api_key: str
     model_name: str
+    embedding_base_url: str
+    embedding_api_key: str
     embedding_model_name: str
     embedding_provider: str
     embedding_dimensions: int
@@ -79,6 +81,14 @@ def _load_model_config(data: dict[str, Any]) -> ModelConfig:
         model_name=_get_env_or_value(
             "DEVMATE_MODEL_NAME",
             model["model_name"],
+        ),
+        embedding_base_url=_get_env_or_value(
+            "DEVMATE_EMBEDDING_BASE_URL",
+            model.get("embedding_base_url", model["ai_base_url"]),
+        ),
+        embedding_api_key=_get_env_or_value(
+            "DEVMATE_EMBEDDING_API_KEY",
+            model.get("embedding_api_key", model["api_key"]),
         ),
         embedding_model_name=_get_env_or_value(
             "DEVMATE_EMBEDDING_MODEL_NAME",

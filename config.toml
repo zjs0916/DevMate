@@ -4,7 +4,11 @@
 ai_base_url = "https://api.openai.com/v1"
 api_key = "your_openai_api_key_here"
 model_name = "gpt-4o"
-embedding_model_name = "text-embedding-3-small"
+embedding_base_url = "https://api.openai.com/v1"
+embedding_api_key = "your_embedding_api_key_here"
+embedding_model_name = "BAAI/bge-small-en-v1.5"
+embedding_provider = "fastembed"
+embedding_dimensions = 384
 
 [search]
 tavily_api_key = "your_tavily_api_key_here"

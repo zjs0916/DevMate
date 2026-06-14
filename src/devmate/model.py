@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
 
 from devmate.config import AppConfig
+from devmate.fastembed_embeddings import FastEmbedEmbeddings
 from devmate.local_embeddings import LocalHashEmbeddings
 
 
@@ -27,6 +28,7 @@ def create_chat_model(config: AppConfig) -> ChatOpenAI:
 
 
 def create_embedding_model(config: AppConfig) -> Embeddings:
+    """Create the configured embedding model for RAG retrieval."""
     provider = config.model.embedding_provider.lower()
 
     if provider == "hash":
@@ -37,8 +39,14 @@ def create_embedding_model(config: AppConfig) -> Embeddings:
     if provider == "openai":
         return OpenAIEmbeddings(
             model=config.model.embedding_model_name,
-            base_url=config.model.ai_base_url,
-            api_key=config.model.api_key,
+            base_url=config.model.embedding_base_url,
+            api_key=config.model.embedding_api_key,
+            dimensions=config.model.embedding_dimensions,
+        )
+
+    if provider == "fastembed":
+        return FastEmbedEmbeddings(
+            model_name=config.model.embedding_model_name,
         )
 
     message = f"Unsupported embedding provider: {provider}"
