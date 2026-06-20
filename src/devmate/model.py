@@ -8,7 +8,6 @@ from langchain_openai import OpenAIEmbeddings
 
 from devmate.config import AppConfig
 from devmate.fastembed_embeddings import FastEmbedEmbeddings
-from devmate.local_embeddings import LocalHashEmbeddings
 
 
 def configure_langsmith(config: AppConfig) -> None:
@@ -30,11 +29,6 @@ def create_chat_model(config: AppConfig) -> ChatOpenAI:
 def create_embedding_model(config: AppConfig) -> Embeddings:
     """Create the configured embedding model for RAG retrieval."""
     provider = config.model.embedding_provider.lower()
-
-    if provider == "hash":
-        return LocalHashEmbeddings(
-            dimensions=config.model.embedding_dimensions,
-        )
 
     if provider == "openai":
         return OpenAIEmbeddings(

@@ -38,7 +38,9 @@ DevMate 当前版本已经升级为一个可多轮交互的 DeepAgents 编程助
 - **MCP Search**：通过 MCP Streamable HTTP 调用 `search_web` 工具，并使用 Tavily 获取网络搜索结果。
 - **Local RAG**：使用 Chroma 存储本地知识库，并使用 FastEmbed 本地语义 embedding 进行文档检索。
 - **FastEmbed Embeddings**：默认使用 `BAAI/bge-small-en-v1.5`，不依赖 OpenAI embedding 付费 API。
+- **Boundary-Aware Chunking**：文档切分按 Markdown 标题 → 段落 → 句子三层边界感知策略，避免硬截断语义单元。
 - **Standard Agent Skills**：Skills 使用标准目录结构：`.skills/<skill-name>/SKILL.md`。
+- **Skills Semantic Search**：`search_skills` 使用 FastEmbed + Chroma 向量检索，支持语义匹配（如"构建接口"可匹配"create API endpoint"）。
 - **Skills Save / Reuse**：Agent 可以保存 Skill，并在后续对话中通过 `search_skills` / `read_skill` 复用。
 - **Docker Interactive Runtime**：Docker Compose 支持交互式 Agent 会话。
 - **LangSmith Tracing**：提供端到端 Trace、Skills 保存 Trace、Skills 搜索/读取/复用 Trace。
@@ -66,9 +68,9 @@ DevMate/
 ├── src/devmate/
 │   ├── agent.py
 │   ├── config.py
+│   ├── fastembed_embeddings.py
 │   ├── file_tools.py
 │   ├── index_docs.py
-│   ├── local_embeddings.py
 │   ├── main.py
 │   ├── mcp_client.py
 │   ├── mcp_search_server.py
@@ -301,7 +303,7 @@ docs/
 src/devmate/fastembed_embeddings.py
 ```
 
-`src/devmate/local_embeddings.py` 仅作为 hash fallback 保留，用于离线调试或特殊场景。
+文档切分采用三层边界感知策略：先按 Markdown 标题拆分，再按段落（`\n\n`）拆分，再按句子结束符拆分，最后才退化为字符截断。这样确保每个 chunk 保持完整的语义单元，提升检索质量。
 
 ## Agent Skills 技能系统
 
@@ -313,10 +315,10 @@ src/devmate/skills.py
 
 支持：
 
-- `save_skill`
-- `list_skills`
-- `read_skill`
-- `search_skills`
+- `save_skill`：保存 skill 文件，并自动写入 `.skills/.chroma` 向量索引
+- `list_skills`：列出所有已保存的 skill
+- `read_skill`：按名称读取 skill 内容
+- `search_skills`：使用 FastEmbed + Chroma 语义检索，找到语义最相近的 skill
 
 Skills 默认保存在：
 

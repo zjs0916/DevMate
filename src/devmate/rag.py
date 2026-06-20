@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from langchain_chroma import Chroma
@@ -13,6 +14,9 @@ import chromadb
 COLLECTION_NAME = "devmate_docs"
 SUPPORTED_SUFFIXES = {".md", ".txt"}
 
+_HEADER_RE = re.compile(r"(?=^#{1,6}\s)", re.MULTILINE)
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?。！？])\s+")
+
 
 def split_text(
     text: str,
@@ -23,22 +27,106 @@ def split_text(
         message = "chunk_size must be greater than overlap."
         raise ValueError(message)
 
+    units = _split_into_units(text)
+    return _merge_into_chunks(units, chunk_size, overlap)
+
+
+def _split_into_units(text: str) -> list[str]:
+    units: list[str] = []
+    for section in _HEADER_RE.split(text):
+        for para in re.split(r"\n{2,}", section):
+            para = para.strip()
+            if para:
+                units.append(para)
+    return units
+
+
+def _merge_into_chunks(
+    units: list[str],
+    chunk_size: int,
+    overlap: int,
+) -> list[str]:
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for unit in units:
+        sep = 2 if current else 0
+        if len(unit) > chunk_size:
+            if current:
+                chunks.append("\n\n".join(current))
+                current = []
+                current_len = 0
+            chunks.extend(_split_oversized(unit, chunk_size, overlap))
+        elif current_len + sep + len(unit) > chunk_size:
+            chunks.append("\n\n".join(current))
+            if current and len(current[-1]) <= overlap:
+                prev = current[-1]
+                current = [prev, unit]
+                current_len = len(prev) + 2 + len(unit)
+            else:
+                current = [unit]
+                current_len = len(unit)
+        else:
+            current_len += sep + len(unit)
+            current.append(unit)
+
+    if current:
+        chunks.append("\n\n".join(current))
+
+    return [c for c in chunks if c.strip()]
+
+
+def _split_oversized(text: str, chunk_size: int, overlap: int) -> list[str]:
+    sentences = _SENTENCE_END_RE.split(text)
+    if len(sentences) <= 1:
+        return _char_split(text, chunk_size, overlap)
+
+    chunks: list[str] = []
+    buf: list[str] = []
+    buf_len = 0
+
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        sep = 1 if buf else 0
+        if len(s) > chunk_size:
+            if buf:
+                chunks.append(" ".join(buf))
+                buf = []
+                buf_len = 0
+            chunks.extend(_char_split(s, chunk_size, overlap))
+        elif buf_len + sep + len(s) > chunk_size:
+            chunks.append(" ".join(buf))
+            if buf and len(buf[-1]) <= overlap:
+                prev = buf[-1]
+                buf = [prev, s]
+                buf_len = len(prev) + 1 + len(s)
+            else:
+                buf = [s]
+                buf_len = len(s)
+        else:
+            buf_len += sep + len(s)
+            buf.append(s)
+
+    if buf:
+        chunks.append(" ".join(buf))
+
+    return [c for c in chunks if c.strip()]
+
+
+def _char_split(text: str, chunk_size: int, overlap: int) -> list[str]:
     chunks: list[str] = []
     start = 0
-    text_length = len(text)
-
-    while start < text_length:
-        end = min(start + chunk_size, text_length)
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
         chunk = text[start:end].strip()
-
         if chunk:
             chunks.append(chunk)
-
-        if end == text_length:
+        if end == len(text):
             break
-
         start = end - overlap
-
     return chunks
 
 
