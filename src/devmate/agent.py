@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -18,60 +19,67 @@ from devmate.model import create_chat_model
 from devmate.rag import search_knowledge_base
 from devmate.skills import create_skill_tools
 
-SYSTEM_PROMPT = """
-You are DevMate, an AI coding assistant.
+LOGGER = logging.getLogger(__name__)
 
-Your job is to help users build and modify software projects.
-
-Important project rules:
-- Use uv for Python dependency and environment management.
-- Do not create or recommend requirements.txt.
-- Use pyproject.toml for Python dependencies.
-- Follow Python PEP 8.
-- Avoid Python print calls; use logging instead.
-- Prefer simple, readable project structures.
-
-Tool usage rules:
-- Use web search when the request may require current external knowledge.
-- Use the local knowledge base for project guidelines and templates.
-- Search saved skills before solving repeatable coding tasks.
-- Read relevant skills before generating or modifying project files.
-- Save a useful skill after completing a repeatable task pattern.
-- Use file tools to create project files in generated_projects/.
-
-Deep agent workflow:
-- Use planning for multi-step coding tasks.
-- Briefly explain the file plan before creating files.
-- After writing files, summarize what was created and how to run it.
-- In a follow-up conversation, reuse relevant saved skills instead of starting
-  from scratch.
-
-When generating Python projects:
-- Include pyproject.toml.
-- Use uv commands in README.
-- Use logging instead of print.
-- Keep route handlers small.
-- Put business logic in separate modules when useful.
-"""
+SYSTEM_PROMPT = "\n".join(
+    [
+        "You are DevMate, an AI coding assistant.",
+        "",
+        "Your job is to help users build and modify software projects.",
+        "",
+        "Important project rules:",
+        "- Use uv for Python dependency and environment management.",
+        "- Do not create or recommend requirements.txt.",
+        "- Use pyproject.toml for Python dependencies.",
+        "- Follow Python PEP 8.",
+        "- Avoid Python print calls; use logging instead.",
+        "- Prefer simple, readable project structures.",
+        "",
+        "Tool usage rules:",
+        "- Use web search when the request may require current external knowledge.",
+        "- Use the local knowledge base for project guidelines and templates.",
+        "- Search saved skills before solving repeatable coding tasks.",
+        "- Read relevant skills before generating or modifying project files.",
+        "- Save a useful skill after completing a repeatable task pattern.",
+        "- Use file tools to create project files in generated_projects/.",
+        "",
+        "Deep agent workflow:",
+        "- Use planning for multi-step coding tasks.",
+        "- Briefly explain the file plan before creating files.",
+        "- After writing files, summarize what was created and how to run it.",
+        "- In a follow-up conversation, reuse relevant saved skills instead of starting from scratch.",
+        "",
+        "When generating Python projects:",
+        "- Include pyproject.toml.",
+        "- Use uv commands in README.",
+        "- Use logging instead of print.",
+        "- Keep route handlers small.",
+        "- Put business logic in separate modules when useful.",
+    ],
+)
 
 
 def create_knowledge_base_tool(config: AppConfig) -> BaseTool:
-    """Create a tool for searching local project documents."""
-
-    @tool("search_knowledge_base")
+    @tool(
+        "search_knowledge_base",
+        description="Search local project documents and guidelines.",
+    )
     def search_local_docs(query: str) -> str:
-        """Search local project documents and guidelines."""
         return search_knowledge_base(query=query, config=config)
 
     return search_local_docs
 
 
 async def create_devmate_agent(config: AppConfig) -> Any:
-    """Create the DevMate Deep Agent with MCP, RAG, files, and Skills."""
     configure_langsmith(config)
-
     model = create_chat_model(config)
-    mcp_tools = await load_mcp_tools(config)
+
+    try:
+        mcp_tools = await load_mcp_tools(config)
+    except Exception as exc:
+        LOGGER.warning("MCP tools unavailable; running without web search: %s", exc)
+        mcp_tools = []
+
     local_tools = [
         create_knowledge_base_tool(config),
         *create_file_tools(),
@@ -94,7 +102,6 @@ async def run_agent_once(
     user_input: str,
     config_path: str = "config.toml",
 ) -> str:
-    """Run a single DevMate turn."""
     config = load_config(config_path)
     agent = await create_devmate_agent(config)
 
@@ -108,23 +115,27 @@ async def run_agent_once(
             ],
         },
     )
+
     return extract_last_message_content(result)
 
 
 def extract_last_message_content(result: dict[str, Any]) -> str:
-    """Extract the final assistant message from an agent result."""
     messages = result.get("messages", [])
     if not messages:
         return ""
 
     last_message = messages[-1]
+
     if isinstance(last_message, BaseMessage):
         content = last_message.content
-    else:
+    elif isinstance(last_message, dict):
         content = last_message.get("content", "")
+    else:
+        content = getattr(last_message, "content", "")
 
     if isinstance(content, str):
         return content
+
     return str(content)
 
 

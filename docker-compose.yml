@@ -1,52 +1,18 @@
 services:
-  mcp-search:
-    build: .
-    command: uv run python -m devmate.mcp_search_server
-    environment:
-      DEVMATE_CONFIG: config.toml
-      DEVMATE_MCP_HOST: 0.0.0.0
-      DEVMATE_MCP_PORT: 8765
-      DEVMATE_MCP_ENDPOINT: /mcp
-      DEVMATE_TAVILY_API_KEY: ${DEVMATE_TAVILY_API_KEY}
-    ports:
-      - "8765:8765"
-
   devmate:
     build: .
-    command: >
-      uv run python -m devmate.main --config config.toml --interactive
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      PYTHONPATH: src
+      NO_PROXY: "127.0.0.1,localhost,::1,host.docker.internal"
+      no_proxy: "127.0.0.1,localhost,::1,host.docker.internal"
     stdin_open: true
     tty: true
-    depends_on:
-      - mcp-search
-    environment:
-      DEVMATE_MODEL_BASE_URL: ${DEVMATE_MODEL_BASE_URL}
-      DEVMATE_MODEL_API_KEY: ${DEVMATE_MODEL_API_KEY}
-      DEVMATE_MODEL_NAME: ${DEVMATE_MODEL_NAME}
-      DEVMATE_EMBEDDING_MODEL_NAME: local-hash
-      DEVMATE_EMBEDDING_PROVIDER: hash
-      DEVMATE_EMBEDDING_DIMENSIONS: 384
-      DEVMATE_TAVILY_API_KEY: ${DEVMATE_TAVILY_API_KEY}
-      DEVMATE_LANGCHAIN_TRACING_V2: "true"
-      DEVMATE_LANGCHAIN_API_KEY: ${DEVMATE_LANGCHAIN_API_KEY}
-      DEVMATE_MCP_HOST: mcp-search
-      DEVMATE_MCP_PORT: 8765
-      DEVMATE_MCP_ENDPOINT: /mcp
-    volumes:
-      - ./docs:/app/docs
-      - ./.skills:/app/.skills
-      - ./.chroma:/app/.chroma
-      - ./generated_projects:/app/generated_projects
-
-  index-docs:
-    build: .
-    command: uv run python -m devmate.index_docs --config config.toml
-    profiles:
-      - tools
-    environment:
-      DEVMATE_EMBEDDING_MODEL_NAME: local-hash
-      DEVMATE_EMBEDDING_PROVIDER: hash
-      DEVMATE_EMBEDDING_DIMENSIONS: 384
-    volumes:
-      - ./docs:/app/docs
-      - ./.chroma:/app/.chroma
+    command: >
+      bash -lc '
+        PYTHONPATH=src uv run python -m devmate.mcp_search_server &
+        sleep 2
+        PYTHONPATH=src uv run python -m devmate.main --config config.docker.toml --interactive
+      '
