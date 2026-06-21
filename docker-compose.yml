@@ -6,13 +6,16 @@ services:
       - .:/app
     environment:
       PYTHONPATH: src
+      DEVMATE_CONFIG: ${DEVMATE_CONFIG:-config.toml}
       NO_PROXY: "127.0.0.1,localhost,::1,host.docker.internal"
       no_proxy: "127.0.0.1,localhost,::1,host.docker.internal"
     stdin_open: true
     tty: true
     command: >
       bash -lc '
-        PYTHONPATH=src uv run python -m devmate.mcp_search_server &
-        sleep 2
-        PYTHONPATH=src uv run python -m devmate.main --config config.docker.toml --interactive
+        CONFIG_FILE="$${DEVMATE_CONFIG:-config.toml}";
+        PYTHONPATH=src uv run python -m devmate.index_docs --config "$$CONFIG_FILE";
+        PYTHONPATH=src DEVMATE_CONFIG="$$CONFIG_FILE" uv run python -m devmate.mcp_search_server &
+        sleep 2;
+        PYTHONPATH=src uv run python -m devmate.main --config "$$CONFIG_FILE" --interactive
       '

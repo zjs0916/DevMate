@@ -7,3 +7,9 @@ __pycache__/
 config.local.toml
 .chroma/
 generated_projects/
+
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.cache/
+.skills/.chroma/

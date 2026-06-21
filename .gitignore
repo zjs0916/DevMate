@@ -8,3 +8,7 @@ config.local.toml
 .DS_Store
 generated_projects/
 config.docker.toml
+config.local.toml
+
+# Local-only config files
+config.local.*

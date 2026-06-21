@@ -77,6 +77,11 @@ async def create_devmate_agent(config: AppConfig) -> Any:
     try:
         mcp_tools = await load_mcp_tools(config)
     except Exception as exc:
+        if config.mcp.required:
+            raise RuntimeError(
+                "MCP server is required but search_web tool could not be loaded. "
+                "Start the MCP server or set mcp.required=false for local fallback mode."
+            ) from exc
         LOGGER.warning("MCP tools unavailable; running without web search: %s", exc)
         mcp_tools = []
 

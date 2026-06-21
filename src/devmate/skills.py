@@ -11,6 +11,8 @@ from langchain_core.tools import tool
 
 from devmate.config import AppConfig
 from devmate.model import create_embedding_model
+from devmate.vectorstore_metadata import validate_embedding_signature
+from devmate.vectorstore_metadata import write_embedding_signature
 
 SLUG_PATTERN = re.compile(r"[^a-z0-9-]+")
 SKILLS_COLLECTION = "devmate_skills"
@@ -21,7 +23,7 @@ def create_skill_tools(config: AppConfig) -> list[BaseTool]:
 
     skills_dir = Path(config.skills.skills_dir)
     embedding_model = create_embedding_model(config)
-    store = _load_skills_store(embedding_model, skills_dir)
+    store = _load_skills_store(embedding_model, skills_dir, config)
 
     @tool("save_skill")
     def save_skill(name: str, description: str, content: str) -> str:
@@ -37,7 +39,7 @@ def create_skill_tools(config: AppConfig) -> list[BaseTool]:
             content=content,
         )
         skill_path.write_text(skill_text, encoding="utf-8")
-        _upsert_skill(store, embedding_model, slug, skill_text, skill_path)
+        _upsert_skill(store, slug, skill_text, skill_path)
         return f"Saved standard skill: {skill_path}"
 
     @tool("list_skills")
@@ -72,22 +74,27 @@ def create_skill_tools(config: AppConfig) -> list[BaseTool]:
     ]
 
 
-def _load_skills_store(embedding_model: object, skills_dir: Path) -> Chroma:
+def _load_skills_store(
+    embedding_model: object,
+    skills_dir: Path,
+    config: AppConfig,
+) -> Chroma:
     persist_dir = skills_dir / ".chroma"
     persist_dir.mkdir(parents=True, exist_ok=True)
+    validate_embedding_signature(persist_dir, config)
     client = chromadb.PersistentClient(path=str(persist_dir))
     store = Chroma(
         collection_name=SKILLS_COLLECTION,
         embedding_function=embedding_model,
         client=client,
     )
-    _sync_missing_skills(store, embedding_model, skills_dir)
+    _sync_missing_skills(store, skills_dir)
+    write_embedding_signature(persist_dir, config)
     return store
 
 
 def _sync_missing_skills(
     store: Chroma,
-    embedding_model: object,
     skills_dir: Path,
 ) -> None:
     paths = _skill_paths(skills_dir)
@@ -98,22 +105,22 @@ def _sync_missing_skills(
         slug = path.parent.name
         if slug not in existing:
             content = path.read_text(encoding="utf-8")
-            _upsert_skill(store, embedding_model, slug, content, path)
+            _upsert_skill(store, slug, content, path)
 
 
 def _upsert_skill(
     store: Chroma,
-    embedding_model: object,
     slug: str,
     text: str,
     path: Path,
 ) -> None:
-    vector = embedding_model.embed_query(text)
-    store._collection.upsert(
+    try:
+        store.delete(ids=[slug])
+    except Exception:
+        pass
+    store.add_documents(
+        [Document(page_content=text, metadata={"slug": slug, "source": str(path)})],
         ids=[slug],
-        documents=[text],
-        embeddings=[vector],
-        metadatas=[{"slug": slug, "source": str(path)}],
     )
 
 

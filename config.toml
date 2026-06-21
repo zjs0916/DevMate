@@ -24,3 +24,4 @@ skills_dir = ".skills"
 host = "127.0.0.1"
 port = 8765
 endpoint = "/mcp"
+required = true

@@ -1,0 +1,36 @@
+# Docker-specific config example — only needed when overriding defaults.
+# Copy to config.docker.toml and fill in real keys, then run:
+#   DEVMATE_CONFIG=config.docker.toml docker compose run --rm devmate
+
+[model]
+ai_base_url = "https://api.deepseek.com"
+api_key = "your_deepseek_api_key_here"
+model_name = "deepseek-v4-flash"
+
+# Default: FastEmbed (no Ollama needed inside Docker)
+embedding_provider = "fastembed"
+embedding_model_name = "BAAI/bge-small-en-v1.5"
+embedding_dimensions = 384
+
+# To use Ollama running on the Mac host instead, replace the three lines above with:
+# embedding_provider = "ollama"
+# embedding_model_name = "bge-m3"
+# embedding_base_url = "http://host.docker.internal:11434"
+# embedding_api_key = "not-needed-for-ollama"
+# embedding_dimensions = 1024
+
+[search]
+tavily_api_key = "your_tavily_api_key_here"
+
+[langsmith]
+langchain_tracing_v2 = true
+langchain_api_key = "your_langsmith_api_key_here"
+
+[skills]
+skills_dir = ".skills"
+
+[mcp]
+host = "127.0.0.1"
+port = 8765
+endpoint = "/mcp"
+required = true

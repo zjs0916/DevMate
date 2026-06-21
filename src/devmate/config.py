@@ -40,6 +40,7 @@ class MCPConfig:
     host: str
     port: int
     endpoint: str
+    required: bool
 
 
 @dataclass(frozen=True)
@@ -163,6 +164,12 @@ def _load_mcp_config(data: dict[str, Any]) -> MCPConfig:
         endpoint=_get_env_or_value(
             "DEVMATE_MCP_ENDPOINT",
             mcp.get("endpoint", "/mcp"),
+        ),
+        required=_to_bool(
+            _get_env_or_value(
+                "DEVMATE_MCP_REQUIRED",
+                str(mcp.get("required", True)),
+            ),
         ),
     )
 

@@ -31,23 +31,54 @@ def create_embedding_model(config: AppConfig) -> Embeddings:
     provider = config.model.embedding_provider.lower()
 
     if provider == "openai":
-        return OpenAIEmbeddings(
+        model = OpenAIEmbeddings(
             model=config.model.embedding_model_name,
             base_url=config.model.embedding_base_url,
             api_key=config.model.embedding_api_key,
             dimensions=config.model.embedding_dimensions,
         )
 
-    if provider == "fastembed":
-        return FastEmbedEmbeddings(
+    elif provider == "fastembed":
+        model = FastEmbedEmbeddings(
             model_name=config.model.embedding_model_name,
         )
 
-    if provider == "ollama":
-        return OllamaEmbeddings(
+    elif provider == "ollama":
+        model = OllamaEmbeddings(
             model=config.model.embedding_model_name,
             base_url=config.model.embedding_base_url,
         )
 
-    message = f"Unsupported embedding provider: {provider}"
-    raise ValueError(message)
+    else:
+        message = f"Unsupported embedding provider: {provider}"
+        raise ValueError(message)
+
+    validate_embedding_dimensions(
+        model,
+        config.model.embedding_dimensions,
+        provider=provider,
+        model_name=config.model.embedding_model_name,
+    )
+    return model
+
+
+def validate_embedding_dimensions(
+    embedding_model: Embeddings,
+    expected_dimensions: int,
+    *,
+    provider: str,
+    model_name: str,
+) -> None:
+    if expected_dimensions <= 0:
+        return
+
+    vector = embedding_model.embed_query("devmate embedding dimension check")
+    actual_dimensions = len(vector)
+
+    if actual_dimensions != expected_dimensions:
+        raise ValueError(
+            "Embedding dimension mismatch: "
+            f"provider={provider!r}, model={model_name!r}, "
+            f"expected={expected_dimensions}, actual={actual_dimensions}. "
+            "Update config.toml or rebuild the vector store with the correct embedding settings."
+        )

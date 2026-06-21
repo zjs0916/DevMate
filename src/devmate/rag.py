@@ -8,6 +8,8 @@ from langchain_core.documents import Document
 
 from devmate.config import AppConfig
 from devmate.model import create_embedding_model
+from devmate.vectorstore_metadata import validate_embedding_signature
+from devmate.vectorstore_metadata import write_embedding_signature
 
 import chromadb
 
@@ -177,18 +179,21 @@ def build_knowledge_base(
     embedding_model = create_embedding_model(config)
     client = chromadb.PersistentClient(path=str(persist_dir))
 
-    return Chroma.from_documents(
+    store = Chroma.from_documents(
         documents=documents,
         embedding=embedding_model,
         collection_name=COLLECTION_NAME,
         client=client,
     )
+    write_embedding_signature(persist_dir, config)
+    return store
 
 
 def load_knowledge_base(
     config: AppConfig,
     persist_dir: str | Path = ".chroma",
 ) -> Chroma:
+    validate_embedding_signature(persist_dir, config)
     embedding_model = create_embedding_model(config)
     client = chromadb.PersistentClient(path=str(persist_dir))
 
