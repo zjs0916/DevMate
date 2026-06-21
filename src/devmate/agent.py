@@ -16,6 +16,7 @@ from devmate.file_tools import create_file_tools
 from devmate.mcp_client import load_mcp_tools
 from devmate.model import configure_langsmith
 from devmate.model import create_chat_model
+from devmate.preview import create_preview_tools
 from devmate.rag import search_knowledge_base
 from devmate.skills import create_skill_tools
 
@@ -55,6 +56,32 @@ SYSTEM_PROMPT = "\n".join(
         "- Use logging instead of print.",
         "- Keep route handlers small.",
         "- Put business logic in separate modules when useful.",
+        "",
+        "FastAPI project generation rules:",
+        "- The entry point must be src/main.py with a module-level `app = FastAPI(...)` variable.",
+        "- Do NOT use `uv run start` anywhere — the correct start command is:",
+        "  uv sync",
+        "  uv run uvicorn src.main:app --host 127.0.0.1 --port 8000",
+        "- Write this exact command in the README, not `uv run start`.",
+        "- If index.html does not need Jinja template variables, serve it with HTMLResponse:",
+        "  from pathlib import Path",
+        "  from fastapi.responses import HTMLResponse",
+        "  INDEX_HTML = Path(__file__).resolve().parent / 'templates' / 'index.html'",
+        "  @router.get('/', response_class=HTMLResponse)",
+        "  async def index() -> HTMLResponse:",
+        "      return HTMLResponse(INDEX_HTML.read_text(encoding='utf-8'))",
+        "- If Jinja2 templates are truly needed, use current Starlette-compatible TemplateResponse syntax.",
+        "",
+        "Preview rules:",
+        "- After creating a runnable FastAPI web app under generated_projects, call start_fastapi_preview",
+        "  with the generated project path so the user can access it immediately.",
+        "- Do NOT tell the user to run `uv run start`.",
+        "- If preview startup fails, show the error and log path, then fix the generated project",
+        "  instead of asking the user to exit DevMate.",
+        "- If you cannot auto-start the preview, tell the user the manual fallback:",
+        "  cd generated_projects/<project-name>",
+        "  uv sync",
+        "  uv run uvicorn src.main:app --host 127.0.0.1 --port 8000",
     ],
 )
 
@@ -89,6 +116,7 @@ async def create_devmate_agent(config: AppConfig) -> Any:
         create_knowledge_base_tool(config),
         *create_file_tools(),
         *create_skill_tools(config),
+        *create_preview_tools(config),
     ]
 
     backend = FilesystemBackend(root_dir=str(Path.cwd()))

@@ -44,12 +44,23 @@ class MCPConfig:
 
 
 @dataclass(frozen=True)
+class PreviewConfig:
+    enabled: bool
+    host: str
+    port_start: int
+    port_end: int
+    open_browser: bool
+    generated_projects_dir: str
+
+
+@dataclass(frozen=True)
 class AppConfig:
     model: ModelConfig
     search: SearchConfig
     langsmith: LangSmithConfig
     skills: SkillsConfig
     mcp: MCPConfig
+    preview: PreviewConfig
 
 
 def load_config(config_path: str | Path = "config.toml") -> AppConfig:
@@ -64,6 +75,7 @@ def load_config(config_path: str | Path = "config.toml") -> AppConfig:
         langsmith=_load_langsmith_config(data),
         skills=_load_skills_config(data),
         mcp=_load_mcp_config(data),
+        preview=_load_preview_config(data),
     )
 
 
@@ -170,6 +182,45 @@ def _load_mcp_config(data: dict[str, Any]) -> MCPConfig:
                 "DEVMATE_MCP_REQUIRED",
                 str(mcp.get("required", True)),
             ),
+        ),
+    )
+
+
+def _load_preview_config(data: dict[str, Any]) -> PreviewConfig:
+    preview = data.get("preview", {})
+
+    return PreviewConfig(
+        enabled=_to_bool(
+            _get_env_or_value(
+                "DEVMATE_PREVIEW_ENABLED",
+                str(preview.get("enabled", True)),
+            ),
+        ),
+        host=_get_env_or_value(
+            "DEVMATE_PREVIEW_HOST",
+            preview.get("host", "127.0.0.1"),
+        ),
+        port_start=int(
+            _get_env_or_value(
+                "DEVMATE_PREVIEW_PORT_START",
+                str(preview.get("port_start", 8000)),
+            ),
+        ),
+        port_end=int(
+            _get_env_or_value(
+                "DEVMATE_PREVIEW_PORT_END",
+                str(preview.get("port_end", 8099)),
+            ),
+        ),
+        open_browser=_to_bool(
+            _get_env_or_value(
+                "DEVMATE_PREVIEW_OPEN_BROWSER",
+                str(preview.get("open_browser", True)),
+            ),
+        ),
+        generated_projects_dir=_get_env_or_value(
+            "DEVMATE_PREVIEW_GENERATED_PROJECTS_DIR",
+            preview.get("generated_projects_dir", "generated_projects"),
         ),
     )
 

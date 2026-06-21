@@ -304,6 +304,22 @@ PYTHONPATH=src uv run python -m devmate.main --config config.local.toml --intera
 DevMate> 请构建一个展示附近徒步路线的网站项目，必须创建项目文件，使用 uv，不要使用 requirements.txt。
 ```
 
+DevMate 生成项目文件后，会自动调用 `start_fastapi_preview`，在后台启动 uvicorn 并返回可访问的 URL，例如：
+
+```text
+Preview started at http://127.0.0.1:8000 (logs: generated_projects/hiking-trails/.devmate/preview.log)
+```
+
+**不需要退出 DevMate 会话**，直接在浏览器中打开返回的 URL 即可访问生成的网站。
+
+如果 preview 自动启动失败，可以手动 fallback：
+
+```bash
+cd generated_projects/<project-name>
+uv sync
+uv run uvicorn src.main:app --host 127.0.0.1 --port 8000
+```
+
 退出：
 
 ```text
@@ -376,6 +392,10 @@ Docker Compose 的重点是：
 * 后台启动 MCP Search Server，主程序与其使用同一份 config
 * 支持 `DEVMATE_CONFIG` 环境变量覆盖配置文件路径
 
+**注意：** Docker Compose 只负责启动 DevMate 和 MCP 服务。
+在 Docker 环境中，preview 会自动启动 uvicorn 并返回 URL，但不会尝试打开宿主机浏览器（容器无法控制宿主机）。
+如需访问生成的网站，需要将 Docker 容器端口映射到宿主机，或使用本地运行模式（自动打开浏览器仅在本地模式下有效）。
+
 ---
 
 ## 生成项目示例
@@ -405,12 +425,14 @@ generated_projects/
             └── style.css
 ```
 
-运行生成项目：
+DevMate 在生成项目后会自动启动 preview，返回可直接访问的 URL。
+
+如需手动运行生成项目：
 
 ```bash
 cd generated_projects/hiking-trails
 uv sync
-uv run python -m src.main
+uv run uvicorn src.main:app --host 127.0.0.1 --port 8000
 ```
 
 浏览器访问：

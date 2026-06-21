@@ -25,3 +25,11 @@ host = "127.0.0.1"
 port = 8765
 endpoint = "/mcp"
 required = true
+
+[preview]
+enabled = true
+host = "127.0.0.1"
+port_start = 8000
+port_end = 8099
+open_browser = true
+generated_projects_dir = "generated_projects"
