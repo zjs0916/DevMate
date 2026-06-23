@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from fastembed import TextEmbedding
 from langchain_core.embeddings import Embeddings
+
+_DEFAULT_CACHE_DIR = str(Path(__file__).parent.parent.parent / ".fastembed_cache")
 
 
 class FastEmbedEmbeddings(Embeddings):
@@ -9,7 +14,8 @@ class FastEmbedEmbeddings(Embeddings):
 
     def __init__(self, model_name: str) -> None:
         self.model_name = model_name
-        self.model = TextEmbedding(model_name=model_name)
+        cache_dir = os.environ.get("FASTEMBED_CACHE_PATH", _DEFAULT_CACHE_DIR)
+        self.model = TextEmbedding(model_name=model_name, cache_dir=cache_dir)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed document chunks for vector storage."""

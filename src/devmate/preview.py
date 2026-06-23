@@ -10,8 +10,7 @@ import webbrowser
 from pathlib import Path
 from typing import NamedTuple
 
-from devmate.config import AppConfig
-from devmate.config import PreviewConfig
+from devmate.config import AppConfig, PreviewConfig
 
 LOGGER = logging.getLogger(__name__)
 

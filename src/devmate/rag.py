@@ -3,15 +3,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import chromadb
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 from devmate.config import AppConfig
 from devmate.model import create_embedding_model
-from devmate.vectorstore_metadata import validate_embedding_signature
-from devmate.vectorstore_metadata import write_embedding_signature
-
-import chromadb
+from devmate.vectorstore_metadata import (
+    validate_embedding_signature,
+    write_embedding_signature,
+)
 
 COLLECTION_NAME = "devmate_docs"
 SUPPORTED_SUFFIXES = {".md", ".txt"}

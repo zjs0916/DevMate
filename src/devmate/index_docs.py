@@ -5,8 +5,7 @@ import logging
 from pathlib import Path
 
 from devmate.config import load_config
-from devmate.rag import build_knowledge_base
-from devmate.rag import load_local_documents
+from devmate.rag import build_knowledge_base, load_local_documents
 
 LOGGER = logging.getLogger(__name__)
 

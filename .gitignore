@@ -1,6 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+.fastembed_cache/
 .env
 config.local.toml
 .chroma/

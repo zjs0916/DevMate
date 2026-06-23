@@ -6,13 +6,14 @@ from pathlib import Path
 import chromadb
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_core.tools import BaseTool
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 
 from devmate.config import AppConfig
 from devmate.model import create_embedding_model
-from devmate.vectorstore_metadata import validate_embedding_signature
-from devmate.vectorstore_metadata import write_embedding_signature
+from devmate.vectorstore_metadata import (
+    validate_embedding_signature,
+    write_embedding_signature,
+)
 
 SLUG_PATTERN = re.compile(r"[^a-z0-9-]+")
 SKILLS_COLLECTION = "devmate_skills"

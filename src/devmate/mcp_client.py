@@ -7,7 +7,6 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from devmate.config import AppConfig
 
-
 LOCAL_NO_PROXY_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 

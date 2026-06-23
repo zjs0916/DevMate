@@ -9,6 +9,7 @@ services:
       DEVMATE_CONFIG: ${DEVMATE_CONFIG:-config.toml}
       NO_PROXY: "127.0.0.1,localhost,::1,host.docker.internal"
       no_proxy: "127.0.0.1,localhost,::1,host.docker.internal"
+      HF_HUB_OFFLINE: "1"
     stdin_open: true
     tty: true
     command: >

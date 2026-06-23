@@ -8,8 +8,7 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage
 
-from devmate.agent import create_devmate_agent
-from devmate.agent import run_agent_once
+from devmate.agent import create_devmate_agent, run_agent_once
 from devmate.config import load_config
 
 LOGGER = logging.getLogger(__name__)

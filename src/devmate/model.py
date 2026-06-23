@@ -3,9 +3,8 @@ from __future__ import annotations
 import os
 
 from langchain_core.embeddings import Embeddings
-from langchain_openai import ChatOpenAI
-from langchain_openai import OpenAIEmbeddings
 from langchain_ollama import OllamaEmbeddings
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 from devmate.config import AppConfig
 from devmate.fastembed_embeddings import FastEmbedEmbeddings
