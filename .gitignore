@@ -13,3 +13,8 @@ config.local.toml
 
 # Local-only config files
 config.local.*
+
+# RAG evaluation data (large local corpora, not for commit)
+rag_eval/corpus/
+rag_eval/corpus_test/
+rag_eval/raw/

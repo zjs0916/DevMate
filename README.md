@@ -483,6 +483,40 @@ src/devmate/rag.py
 
 ---
 
+## RAG-only smoke test
+
+`scripts/test_rag_retrieval.py` 是一个可复现的本地知识库检索冒烟测试，用来证明 RAG 检索正常工作。
+
+它直接调用 `src/devmate/rag.py` 的 `search_knowledge_base`，**不构建完整 Agent、不启动 MCP server、不调用 `search_web` / Tavily**——所以可以在纯离线、无网络搜索的情况下验证本地检索。
+
+### 1. 建索引
+
+```bash
+PYTHONPATH=src uv run python -m devmate.index_docs \
+    --config config.local.toml --docs-dir rag_eval/corpus --persist-dir .chroma
+```
+
+### 2. 运行测试
+
+```bash
+PYTHONPATH=src uv run python scripts/test_rag_retrieval.py --config config.local.toml --k 4
+```
+
+支持参数：
+
+* `--config`：配置文件路径（默认 `config.local.toml`）
+* `--k`：每个问题检索的 chunk 数量（默认 `4`）
+
+每个问题会输出 question、检索到的 source file、chunk preview 和是否检索到内容，最后给出 summary（总问题数、检索到上下文的问题数、覆盖的来源 `fanren.txt` / `players_handbook.txt`）。如果 `.chroma` 不存在，会提示先运行上面的建索引命令。
+
+### 为什么这个测试不需要 MCP server
+
+MCP server 只负责网络搜索（`search_web` → Tavily）。本地 RAG 检索完全发生在本地 Chroma 向量库与 FastEmbed embedding 之间，不经过任何网络搜索路径。该脚本只调用 `search_knowledge_base`，因此无需启动 MCP server，也不会触发 Tavily 调用。
+
+> 注意：`rag_eval/corpus`、`rag_eval/raw` 和 `.chroma` 属于本地数据/索引产物，已在 `.gitignore` 中排除，不提交到 GitHub。
+
+---
+
 ## Skills 工作流程
 
 Skills 的作用是保存可复用的开发经验。
