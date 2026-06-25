@@ -13,3 +13,9 @@ generated_projects/
 .mypy_cache/
 .cache/
 .skills/.chroma/
+
+# Large local corpora and host-only secrets (never bake into the image)
+rag_eval/
+config.docker.toml
+config.local.*
+*.png

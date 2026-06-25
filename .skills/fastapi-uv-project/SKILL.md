@@ -47,4 +47,4 @@ After generating files, check that:
 - `pyproject.toml` exists.
 - `requirements.txt` does not exist.
 - Python files use logging instead of print.
-- The app can be started with `uv run python -m src.main` or a documented equivalent.
+- The app can be started with `uv run uvicorn src.main:app --host 127.0.0.1 --port 8000`.

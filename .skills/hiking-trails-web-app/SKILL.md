@@ -49,5 +49,8 @@ hiking-trails/
 
 - The generated app should include at least several sample trails.
 - The UI should show trail name, location, difficulty, distance, and estimated time.
-- The README should explain how to run the app with uv.
+- The README should explain how to run the app with uv and `pyproject.toml`
+  (no `requirements.txt`).
+- The documented run command should be
+  `uv run uvicorn src.main:app --host 127.0.0.1 --port 8000`.
 - The project should avoid `print()` in Python source files.

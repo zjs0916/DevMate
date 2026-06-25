@@ -20,11 +20,14 @@ Run after indexing the corpus::
 from __future__ import annotations
 
 import argparse
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 from devmate.config import load_config
 from devmate.rag import search_knowledge_base
+
+LOGGER = logging.getLogger(__name__)
 
 DEFAULT_QUESTIONS = [
     "韩立是谁引荐进入七玄门相关考验的？",
@@ -114,38 +117,40 @@ def run_question(question: str, config, persist_dir: str, k: int) -> QuestionRes
     return QuestionResult(question, source_file, preview, retrieved=True)
 
 
-def print_result(index: int, result: QuestionResult) -> None:
-    print(f"[{index}] question: {result.question}")
-    print(f"    retrieved: {'yes' if result.retrieved else 'no'}")
-    print(f"    source file: {result.source_file or '(none)'}")
-    print(f"    chunk preview: {result.preview or '(none)'}")
-    print()
+def log_result(index: int, result: QuestionResult) -> None:
+    LOGGER.info("[%d] question: %s", index, result.question)
+    LOGGER.info("    retrieved: %s", "yes" if result.retrieved else "no")
+    LOGGER.info("    source file: %s", result.source_file or "(none)")
+    LOGGER.info("    chunk preview: %s", result.preview or "(none)")
+    LOGGER.info("")
 
 
-def print_summary(results: list[QuestionResult]) -> None:
+def log_summary(results: list[QuestionResult]) -> None:
     total = len(results)
     with_context = sum(1 for r in results if r.retrieved)
     covered = {r.source_file for r in results if r.source_file}
 
-    print("=" * 60)
-    print("Summary")
-    print("=" * 60)
-    print(f"total questions:            {total}")
-    print(f"questions with context:     {with_context}")
-    print("sources covered:")
+    LOGGER.info("=" * 60)
+    LOGGER.info("Summary")
+    LOGGER.info("=" * 60)
+    LOGGER.info("total questions:            %d", total)
+    LOGGER.info("questions with context:     %d", with_context)
+    LOGGER.info("sources covered:")
     for source in EXPECTED_SOURCES:
         mark = "yes" if source in covered else "no"
-        print(f"    {source}: {mark}")
+        LOGGER.info("    %s: %s", source, mark)
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     args = parse_args()
 
     persist_path = Path(args.persist_dir)
     if not persist_path.exists():
-        print(f"Chroma index not found at: {persist_path}")
-        print("Build it first by running:")
-        print(
+        LOGGER.error("Chroma index not found at: %s", persist_path)
+        LOGGER.error("Build it first by running:")
+        LOGGER.error(
             "  PYTHONPATH=src uv run python -m devmate.index_docs "
             "--config config.local.toml --docs-dir rag_eval/corpus "
             "--persist-dir .chroma",
@@ -154,18 +159,22 @@ def main() -> None:
 
     config = load_config(args.config)
 
-    print(f"Running RAG-only smoke test (k={args.k}, persist_dir={args.persist_dir})")
-    print(f"config: {args.config}")
-    print("=" * 60)
-    print()
+    LOGGER.info(
+        "Running RAG-only smoke test (k=%d, persist_dir=%s)",
+        args.k,
+        args.persist_dir,
+    )
+    LOGGER.info("config: %s", args.config)
+    LOGGER.info("=" * 60)
+    LOGGER.info("")
 
     results: list[QuestionResult] = []
     for index, question in enumerate(DEFAULT_QUESTIONS, start=1):
         result = run_question(question, config, args.persist_dir, args.k)
         results.append(result)
-        print_result(index, result)
+        log_result(index, result)
 
-    print_summary(results)
+    log_summary(results)
 
     if not all(r.retrieved for r in results):
         raise SystemExit(1)

@@ -1,22 +1,64 @@
+# DevMate service orchestration.
+#
+# Three services, matching requirements.md (App + MCP Server + index/vector
+# store) and docs/docker_compose_test.md:
+#   - mcp-search:  Streamable HTTP MCP search server (Tavily), exposes :8765
+#   - index-docs:  one-shot job that builds the local Chroma vector store
+#   - devmate:     the interactive agent; talks to mcp-search over HTTP
+#
+# All three share one built image (devmate:local). The repo is bind-mounted so
+# generated_projects/, .chroma/ and .fastembed_cache/ are shared with the host.
+
+x-common: &common
+  image: devmate:local
+  working_dir: /app
+  volumes:
+    - .:/app
+  environment: &common-env
+    PYTHONPATH: src
+    DEVMATE_CONFIG: ${DEVMATE_CONFIG:-config.toml}
+    HF_HUB_OFFLINE: "1"
+    NO_PROXY: "127.0.0.1,localhost,::1,host.docker.internal,mcp-search"
+    no_proxy: "127.0.0.1,localhost,::1,host.docker.internal,mcp-search"
+
 services:
-  devmate:
+  mcp-search:
+    <<: *common
     build: .
-    working_dir: /app
-    volumes:
-      - .:/app
     environment:
-      PYTHONPATH: src
-      DEVMATE_CONFIG: ${DEVMATE_CONFIG:-config.toml}
-      NO_PROXY: "127.0.0.1,localhost,::1,host.docker.internal"
-      no_proxy: "127.0.0.1,localhost,::1,host.docker.internal"
-      HF_HUB_OFFLINE: "1"
+      <<: *common-env
+      # Bind to all interfaces so other containers can reach it by hostname.
+      DEVMATE_MCP_HOST: "0.0.0.0"
+    ports:
+      - "8765:8765"
+    command: uv run python -m devmate.mcp_search_server
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(('127.0.0.1',8765))==0 else 1)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+
+  index-docs:
+    <<: *common
+    command: uv run python -m devmate.index_docs --config ${DEVMATE_CONFIG:-config.toml}
+
+  devmate:
+    <<: *common
+    environment:
+      <<: *common-env
+      # Reach the MCP server by its compose service name.
+      DEVMATE_MCP_HOST: mcp-search
+      DEVMATE_MCP_PORT: "8765"
+    depends_on:
+      mcp-search:
+        condition: service_healthy
+      index-docs:
+        condition: service_completed_successfully
     stdin_open: true
     tty: true
-    command: >
-      bash -lc '
-        CONFIG_FILE="$${DEVMATE_CONFIG:-config.toml}";
-        PYTHONPATH=src uv run python -m devmate.index_docs --config "$$CONFIG_FILE";
-        PYTHONPATH=src DEVMATE_CONFIG="$$CONFIG_FILE" uv run python -m devmate.mcp_search_server &
-        sleep 2;
-        PYTHONPATH=src uv run python -m devmate.main --config "$$CONFIG_FILE" --interactive
-      '
+    command: uv run python -m devmate.main --config ${DEVMATE_CONFIG:-config.toml} --interactive

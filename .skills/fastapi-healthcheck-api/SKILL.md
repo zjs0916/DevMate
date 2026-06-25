@@ -42,14 +42,11 @@ project-name/
 name = "healthcheck-api"
 version = "0.1.0"
 description = "A simple FastAPI health check API"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
 ]
-
-[project.scripts]
-serve = "src.main:run"
 
 [tool.uv]
 dev-dependencies = []
@@ -88,7 +85,7 @@ async def health() -> JSONResponse:
 
 def run() -> None:
     """Run the FastAPI application with uvicorn."""
-    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("src.main:app", host="127.0.0.1", port=8000, reload=True)
 
 
 if __name__ == "__main__":
@@ -109,10 +106,10 @@ A minimal FastAPI health check service.
 uv sync
 
 # Run the server
-uv run serve
+uv run uvicorn src.main:app --host 127.0.0.1 --port 8000
 ```
 
-The API will be available at `http://localhost:8000`.
+The API will be available at `http://127.0.0.1:8000`.
 
 ## Endpoints
 
@@ -124,7 +121,7 @@ The API will be available at `http://localhost:8000`.
 
 ```bash
 # Run with auto-reload
-uv run serve
+uv run uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 ```
 
@@ -133,7 +130,7 @@ uv run serve
 ```bash
 cd project-name
 uv sync          # Install dependencies from pyproject.toml
-uv run serve     # Start the server
+uv run uvicorn src.main:app --host 127.0.0.1 --port 8000  # Start the server
 ```
 
 ## Key Rules
