@@ -15,9 +15,12 @@ __pycache__/
 config.local.toml
 config.local.*
 config.docker.toml
+# Real RAG-eval config (keep config.rag_eval.ollama.example.toml committed)
+config.rag_eval.ollama.toml
 
 # Generated output
 generated_projects/
+VERIFY_REPORT.md
 
 # RAG evaluation data (large local corpora, not for commit)
 rag_eval/corpus/

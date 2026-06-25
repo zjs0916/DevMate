@@ -17,6 +17,11 @@ from devmate.vectorstore_metadata import (
 COLLECTION_NAME = "devmate_docs"
 SUPPORTED_SUFFIXES = {".md", ".txt"}
 
+# Insert embeddings in batches so a single request never has to handle the
+# whole corpus at once. Some embedding backends (e.g. Ollama) crash or time
+# out on one huge batch; FastEmbed produces identical vectors either way.
+EMBED_BATCH_SIZE = 256
+
 _HEADER_RE = re.compile(r"(?=^#{1,6}\s)", re.MULTILINE)
 _SENTENCE_END_RE = re.compile(r"(?<=[.!?。！？])\s+")
 
@@ -170,6 +175,7 @@ def build_knowledge_base(
     config: AppConfig,
     docs_dir: str | Path = "docs",
     persist_dir: str | Path = ".chroma",
+    batch_size: int = EMBED_BATCH_SIZE,
 ) -> Chroma:
     documents = load_local_documents(docs_dir)
 
@@ -180,12 +186,15 @@ def build_knowledge_base(
     embedding_model = create_embedding_model(config)
     client = chromadb.PersistentClient(path=str(persist_dir))
 
-    store = Chroma.from_documents(
-        documents=documents,
-        embedding=embedding_model,
+    store = Chroma(
         collection_name=COLLECTION_NAME,
+        embedding_function=embedding_model,
         client=client,
     )
+
+    for start in range(0, len(documents), batch_size):
+        store.add_documents(documents[start:start + batch_size])
+
     write_embedding_signature(persist_dir, config)
     return store
 

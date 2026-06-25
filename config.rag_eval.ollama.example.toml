@@ -1,0 +1,53 @@
+# Optional multilingual RAG-eval config example (Ollama bge-m3, 1024 dims).
+#
+# This is an OPTIONAL evaluation path for Chinese / mixed CN-EN corpora
+# (e.g. fanren.txt + players_handbook.txt). The project default stays on
+# FastEmbed BAAI/bge-small-en-v1.5 (384 dims) — see config.toml.
+#
+# Usage:
+#   cp config.rag_eval.ollama.example.toml config.rag_eval.ollama.toml
+#   # fill in real keys in config.rag_eval.ollama.toml (NOT committed)
+#   ollama pull bge-m3
+#   rm -rf .chroma_rag_eval   # switching embeddings requires a fresh index
+#   PYTHONPATH=src uv run python -m devmate.index_docs \
+#       --config config.rag_eval.ollama.toml \
+#       --docs-dir rag_eval/corpus --persist-dir .chroma_rag_eval
+#   PYTHONPATH=src uv run python scripts/test_rag_retrieval.py \
+#       --config config.rag_eval.ollama.toml --persist-dir .chroma_rag_eval --k 4
+
+[model]
+ai_base_url = "https://api.deepseek.com"
+api_key = "your_deepseek_api_key_here"
+model_name = "deepseek-chat"
+
+embedding_provider = "ollama"
+embedding_model_name = "bge-m3"
+# Local Ollama. Inside Docker calling the Mac host, use:
+#   embedding_base_url = "http://host.docker.internal:11434"
+embedding_base_url = "http://127.0.0.1:11434"
+embedding_api_key = "not-needed-for-ollama"
+embedding_dimensions = 1024
+
+[search]
+tavily_api_key = "your_tavily_api_key_here"
+
+[langsmith]
+langchain_tracing_v2 = false
+langchain_api_key = "your_langsmith_api_key_here"
+
+[skills]
+skills_dir = ".skills"
+
+[mcp]
+host = "127.0.0.1"
+port = 8765
+endpoint = "/mcp"
+required = false
+
+[preview]
+enabled = true
+host = "127.0.0.1"
+port_start = 8000
+port_end = 8099
+open_browser = true
+generated_projects_dir = "generated_projects"

@@ -522,33 +522,93 @@ src/devmate/rag.py
 
 它直接调用 `src/devmate/rag.py` 的 `search_knowledge_base`，**不构建完整 Agent、不启动 MCP server、不调用 `search_web` / Tavily**——所以可以在纯离线、无网络搜索的情况下验证本地检索。
 
-> **关于语料：** `rag_eval/corpus` 是**本地测试语料目录**，里面的大文件/语料不提交到 GitHub（已在 `.gitignore` 中排除）。如果面试官提供了 RAG 数据包，请先把它解压/放入 `rag_eval/corpus` 后，再运行下面的建索引与测试命令。
+> **关于语料：** `rag_eval/corpus` 是**本地测试语料目录**，里面的大文件/语料不提交到 GitHub（已在 `.gitignore` 中排除）。如果拿到了 RAG 数据包，请先把它解压/放入 `rag_eval/corpus` 后，再运行下面的建索引与测试命令。
 
 ### 1. 建索引
 
+RAG eval 使用独立的索引目录 `.chroma_rag_eval`，不影响 Agent 默认使用的 `.chroma`：
+
 ```bash
 PYTHONPATH=src uv run python -m devmate.index_docs \
-    --config config.local.toml --docs-dir rag_eval/corpus --persist-dir .chroma
+    --config config.local.toml --docs-dir rag_eval/corpus --persist-dir .chroma_rag_eval
 ```
 
 ### 2. 运行测试
 
 ```bash
-PYTHONPATH=src uv run python scripts/test_rag_retrieval.py --config config.local.toml --k 4
+PYTHONPATH=src uv run python scripts/test_rag_retrieval.py \
+    --config config.local.toml --persist-dir .chroma_rag_eval --k 4
 ```
 
 支持参数：
 
 * `--config`：配置文件路径（默认 `config.local.toml`）
+* `--persist-dir`：Chroma 索引目录（默认 `.chroma`）
 * `--k`：每个问题检索的 chunk 数量（默认 `4`）
+* `--strict-keywords`：把"命中正确文件但关键词检查没全过"也判为失败（默认只 warning）
 
-每个问题会输出 question、检索到的 source file、chunk preview 和是否检索到内容，最后给出 summary（总问题数、检索到上下文的问题数、覆盖的来源 `fanren.txt` / `players_handbook.txt`）。如果 `.chroma` 不存在，会提示先运行上面的建索引命令。
+每个问题除了检查**是否检索到内容**和 **top source file 是否匹配 expected source**，还会对检索到的文本做关键词检查，发现"文件命中但 chunk 没真正回答问题"的情况，而不是静默算通过。每个问题支持三种关键词字段（都可选，按 AND 组合）：
+
+* `expected_keywords_all`：列表里的关键词**必须全部**出现；
+* `expected_keywords_any`：列表里**至少命中一个**；
+* `expected_keyword_groups`：**分组（AND-of-ORs）**——每个 group 至少命中一个关键词。
+
+`expected_keyword_groups` 最灵活、也最能避免假阳性：一个 group 对应一个"概念"，里面列出语料可能用到的同义词。例如中文问题"小绿瓶"的相关段落实际可能写成"小瓶 / 瓶子 / 瓶"，所以把它们放进同一个 group，既保证"概念命中"，又不会因为死绑"小绿瓶"这一个精确词而误判;同时把太宽的词（如"韩立"，几乎每个 fanren.txt chunk 都出现）单独成组，使它无法独自放行整道题。
+
+输出 summary 分别显示：`source checks passed: X / total` 和 `keyword checks passed: X / total`，以及覆盖的来源 `fanren.txt` / `players_handbook.txt`。
+
+判定规则：
+
+* 检索失败或 source 不匹配 → 直接失败（退出码非 0）
+* 关键词检查没全过（`all` 缺词 / `any` 一个都没中 / 某个 group 全落空）→ 默认打印 **WARN**，退出码仍为 0；加 `--strict-keywords` 后升级为失败（退出码 1）
+
+> **关于中文检索质量：** 默认 FastEmbed `BAAI/bge-small-en-v1.5` 是英文 embedding，对中文/中英混合语料（如 `fanren.txt`）的关键词命中可能不稳定。如果中文问题出现 keyword WARN，建议改用多语言 embedding（见下方 [Optional multilingual RAG evaluation with bge-m3](#optional-multilingual-rag-evaluation-with-bge-m3)）。
+
+如果索引目录不存在，会提示先运行上面的建索引命令。
 
 ### 为什么这个测试不需要 MCP server
 
 MCP server 只负责网络搜索（`search_web` → Tavily）。本地 RAG 检索完全发生在本地 Chroma 向量库与 FastEmbed embedding 之间，不经过任何网络搜索路径。该脚本只调用 `search_knowledge_base`，因此无需启动 MCP server，也不会触发 Tavily 调用。
 
-> 注意：`rag_eval/corpus`、`rag_eval/raw` 和 `.chroma` 属于本地数据/索引产物，已在 `.gitignore` 中排除，不提交到 GitHub。
+> 注意：`rag_eval/corpus`、`rag_eval/raw` 和 `.chroma_rag_eval` 属于本地数据/索引产物，已在 `.gitignore` 中排除，不提交到 GitHub。
+
+---
+
+## Optional multilingual RAG evaluation with bge-m3
+
+默认 embedding 是 FastEmbed `BAAI/bge-small-en-v1.5`（384 维）。它**轻量、无需 Ollama**，clone 后 / Docker 里 / 本地都能直接跑通，适合项目规范、README、coding docs 这类英文文档——所以它是项目默认路径，`config.toml` 不会改成 bge-m3。
+
+但它是英文 embedding。**如果测试语料包含中文或中英混合文档**（例如 `fanren.txt` + `players_handbook.txt`），中文问题的检索质量会不稳定（`test_rag_retrieval.py` 可能报 keyword WARN）。这种情况下建议改用多语言 embedding **Ollama `bge-m3`（1024 维）**做一次性的 RAG eval，而**不改动主项目默认配置**。
+
+> **必须重建 Chroma：** FastEmbed（384 维）和 bge-m3（1024 维）维度不兼容，切换 `embedding_provider` / `embedding_model_name` / `embedding_dimensions` 后**必须删除旧索引**再重建，否则维度冲突：
+>
+> ```bash
+> rm -rf .chroma .chroma_rag_eval .skills/.chroma
+> ```
+
+本地运行多语言 RAG eval：
+
+```bash
+# 1. 启动 Ollama 并拉取 bge-m3
+brew services start ollama
+ollama pull bge-m3
+
+# 2. 从 example 复制一份真实 eval 配置（config.rag_eval.ollama.toml 不提交）
+cp config.rag_eval.ollama.example.toml config.rag_eval.ollama.toml
+
+# 3. 用 bge-m3 重建独立的 eval 索引
+PYTHONPATH=src uv run python -m devmate.index_docs \
+    --config config.rag_eval.ollama.toml \
+    --docs-dir rag_eval/corpus --persist-dir .chroma_rag_eval
+
+# 4. 跑检索质量测试（中文关键词也应命中）
+PYTHONPATH=src uv run python scripts/test_rag_retrieval.py \
+    --config config.rag_eval.ollama.toml --persist-dir .chroma_rag_eval --k 4
+```
+
+> **在 Docker 里跑这个 eval：** 如果 Docker 容器要调用 Mac 本机的 Ollama，`config.rag_eval.ollama.toml` 里的 `embedding_base_url` 要改成 `http://host.docker.internal:11434`（容器内的 `127.0.0.1` 指向容器自身，不是 Mac 本机）。
+
+`config.rag_eval.ollama.toml`、`.chroma_rag_eval`、`rag_eval/corpus`、`rag_eval/raw`、`.fastembed_cache` 以及任何真实 API key 都已在 `.gitignore` 中排除，不提交到 GitHub。
 
 ---
 
@@ -772,7 +832,7 @@ git grep -n "sk-\|api_key\|deepseek\|tavily\|langchain_api_key"
 
 ## 推荐演示流程
 
-面试或项目展示时，可以按这个顺序演示：
+项目演示或评审时，可以按这个顺序演示：
 
 1. 展示 DevMate 架构：Agent + RAG + MCP + Skills + 文件生成
 2. 运行 `index_docs`（默认使用 FastEmbed，无需启动 Ollama）
