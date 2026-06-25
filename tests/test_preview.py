@@ -96,15 +96,24 @@ def test_port_finder_skips_occupied_port(tmp_path: Path) -> None:
     gen_dir = tmp_path / "generated_projects"
     gen_dir.mkdir()
 
-    # Occupy port_start
+    # Dynamically grab a free port and keep it bound so the test does not
+    # depend on a fixed port (e.g. 8000) being available on the host. Binding
+    # to port 0 both picks a currently-free port and occupies it race-free.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as blocker:
-        blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        blocker.bind(("127.0.0.1", 8000))
-        cfg = _make_preview_cfg(gen_dir, port_start=8000, port_end=8002)
+        blocker.bind(("127.0.0.1", 0))
+        start_port = blocker.getsockname()[1]
+
+        cfg = _make_preview_cfg(
+            gen_dir, port_start=start_port, port_end=start_port + 50
+        )
         port = _find_available_port(cfg)
 
     assert port is not None
-    assert port != 8000
+    assert port != start_port
+
+    # The returned port must actually be free.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((cfg.host, port))
 
 
 def test_preview_config_loads_from_config_toml() -> None:

@@ -116,7 +116,10 @@ async def create_devmate_agent(config: AppConfig) -> Any:
         *create_preview_tools(config),
     ]
 
-    backend = FilesystemBackend(root_dir=str(Path.cwd()))
+    # Explicitly disable virtual mode so the backend performs real filesystem
+    # operations rooted at the project directory (suppresses the ambiguous
+    # root_dir/virtual_mode warning).
+    backend = FilesystemBackend(root_dir=str(Path.cwd()), virtual_mode=False)
     skills_path = _normalise_skills_path(config.skills.skills_dir)
 
     return create_deep_agent(

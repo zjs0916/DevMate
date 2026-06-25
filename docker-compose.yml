@@ -17,7 +17,11 @@ x-common: &common
   environment: &common-env
     PYTHONPATH: src
     DEVMATE_CONFIG: ${DEVMATE_CONFIG:-config.toml}
-    HF_HUB_OFFLINE: "1"
+    # Default 0: allow the first run to download the FastEmbed model. Set
+    # HF_HUB_OFFLINE=1 to force a fully offline run once the model is cached.
+    HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+    # Persist the downloaded FastEmbed model to the bind-mounted cache dir.
+    FASTEMBED_CACHE_PATH: /app/.fastembed_cache
     NO_PROXY: "127.0.0.1,localhost,::1,host.docker.internal,mcp-search"
     no_proxy: "127.0.0.1,localhost,::1,host.docker.internal,mcp-search"
 

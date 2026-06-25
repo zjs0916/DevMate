@@ -19,7 +19,7 @@ project-name/
 ├── README.md               # Run instructions
 ├── src/
 │   ├── __init__.py
-│   └── main.py             # FastAPI app with /health endpoint
+│   └── main.py             # FastAPI app with / and /health endpoints
 ```
 
 ## Step-by-Step Workflow
@@ -76,6 +76,15 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="HealthCheck API", version="0.1.0")
 
 
+@app.get("/")
+async def root() -> JSONResponse:
+    """Return a friendly landing response pointing at the health endpoint."""
+    logger.info("Root endpoint called")
+    return JSONResponse(
+        content={"message": "DevMate healthcheck API", "health": "/health"}
+    )
+
+
 @app.get("/health")
 async def health() -> JSONResponse:
     """Return a simple health check response."""
@@ -111,11 +120,19 @@ uv run uvicorn src.main:app --host 127.0.0.1 --port 8000
 
 The API will be available at `http://127.0.0.1:8000`.
 
+Once running, you can visit:
+
+- `/` — landing JSON pointing at the health endpoint
+- `/health` — health check (`{"status": "healthy"}`)
+- `/docs` — interactive Swagger UI
+
 ## Endpoints
 
-| Method | Path       | Description          |
-|--------|------------|----------------------|
-| GET    | `/health`  | Health check         |
+| Method | Path       | Description                       |
+|--------|------------|-----------------------------------|
+| GET    | `/`        | Landing JSON with API info        |
+| GET    | `/health`  | Health check                      |
+| GET    | `/docs`    | Interactive API docs (Swagger UI) |
 
 ## Development
 
@@ -139,5 +156,5 @@ uv run uvicorn src.main:app --host 127.0.0.1 --port 8000  # Start the server
 - **pyproject.toml only** — Never create or recommend requirements.txt.
 - **src layout** — Put application code under `src/`.
 - **logging over print** — Always use `logging.getLogger(__name__)` instead of `print()`.
-- **Keep route handlers small** — Simple JSONResponse returns for /health.
+- **Keep route handlers small** — Simple JSONResponse returns for `/` and `/health`.
 - **No pytest, no test files** — Keep it minimal unless asked otherwise.

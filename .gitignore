@@ -1,18 +1,23 @@
 .venv/
 __pycache__/
 *.pyc
+.DS_Store
+
+# Caches and local indexes (built locally, not for commit)
 .fastembed_cache/
+.chroma/
+.chroma_rag_eval/
+.skills/cache/
+.skills/.chroma/
+
+# Secrets and local-only config files
 .env
 config.local.toml
-.chroma/
-.skills/cache/
-.DS_Store
-generated_projects/
-config.docker.toml
-config.local.toml
-
-# Local-only config files
 config.local.*
+config.docker.toml
+
+# Generated output
+generated_projects/
 
 # RAG evaluation data (large local corpora, not for commit)
 rag_eval/corpus/
