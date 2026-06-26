@@ -1,13 +1,15 @@
 # DevMate service orchestration.
 #
-# Three services, matching requirements.md (App + MCP Server + index/vector
-# store) and docs/docker_compose_test.md:
+# Four services, matching requirements.md (App + MCP Server + preprocessing +
+# index/vector store) and docs/docker_compose_test.md:
 #   - mcp-search:  Streamable HTTP MCP search server (Tavily), exposes :8765
+#   - preprocess-corpus: one-shot job that converts rag_eval/raw into rag_eval/corpus
 #   - index-docs:  one-shot job that builds the local Chroma vector store
 #   - devmate:     the interactive agent; talks to mcp-search over HTTP
 #
-# All three share one built image (devmate:local). The repo is bind-mounted so
-# generated_projects/, .chroma/ and .fastembed_cache/ are shared with the host.
+# All four share one built image (devmate:local). The repo is bind-mounted so
+# generated_projects/, rag_eval/corpus/, .chroma/ and .fastembed_cache/ are
+# shared with the host.
 
 x-common: &common
   image: devmate:local
@@ -47,9 +49,36 @@ services:
       retries: 12
       start_period: 20s
 
+  preprocess-corpus:
+    <<: *common
+    command:
+      - uv
+      - run
+      - python
+      - scripts/preprocess_corpus.py
+      - --raw-dir
+      - ${RAG_RAW_DIR:-rag_eval/raw}
+      - --output-dir
+      - ${RAG_CORPUS_DIR:-rag_eval/corpus}
+
   index-docs:
     <<: *common
-    command: uv run python -m devmate.index_docs --config ${DEVMATE_CONFIG:-config.toml}
+    depends_on:
+      preprocess-corpus:
+        condition: service_completed_successfully
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - devmate.index_docs
+      - --config
+      - ${DEVMATE_CONFIG:-config.toml}
+      - --docs-dir
+      - ${RAG_CORPUS_DIR:-rag_eval/corpus}
+      - --persist-dir
+      - .chroma
+      - --reset
 
   devmate:
     <<: *common
@@ -58,6 +87,7 @@ services:
       # Reach the MCP server by its compose service name.
       DEVMATE_MCP_HOST: mcp-search
       DEVMATE_MCP_PORT: "8765"
+      DEVMATE_RUNTIME: docker
     depends_on:
       mcp-search:
         condition: service_healthy

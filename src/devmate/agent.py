@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from devmate.rag import search_knowledge_base
 from devmate.skills import create_skill_tools
 
 LOGGER = logging.getLogger(__name__)
+DEFAULT_RAG_PERSIST_DIR = ".chroma"
 
 SYSTEM_PROMPT = "\n".join(
     [
@@ -147,6 +149,7 @@ async def run_agent_once(
                 },
             ],
         },
+        config=build_langsmith_run_config(config_path),
     )
 
     return extract_last_message_content(result)
@@ -177,3 +180,20 @@ def _normalise_skills_path(skills_dir: str) -> str:
     if not path:
         return ".skills/"
     return f"{path}/"
+
+
+def build_langsmith_run_config(
+    config_path: str,
+    *,
+    rag_persist_dir: str = DEFAULT_RAG_PERSIST_DIR,
+) -> dict[str, Any]:
+    runtime = os.environ.get("DEVMATE_RUNTIME", "local").strip() or "local"
+    return {
+        "tags": ["devmate", "rag", runtime],
+        "metadata": {
+            "runtime": runtime,
+            "devmate_config": Path(config_path).name,
+            "rag_persist_dir": rag_persist_dir,
+            "hostname": os.environ.get("HOSTNAME"),
+        },
+    }

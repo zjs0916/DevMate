@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 from pathlib import Path
 
 from devmate.config import load_config
@@ -29,6 +30,11 @@ def parse_args() -> argparse.Namespace:
         default=".chroma",
         help="Directory for the local Chroma vector database.",
     )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete the existing Chroma persist directory before indexing.",
+    )
 
     return parser.parse_args()
 
@@ -39,6 +45,10 @@ def main() -> None:
     args = parse_args()
     docs_dir = Path(args.docs_dir)
     persist_dir = Path(args.persist_dir)
+
+    if args.reset and persist_dir.exists():
+        LOGGER.info("Removing existing Chroma vector store at %s.", persist_dir)
+        shutil.rmtree(persist_dir)
 
     documents = load_local_documents(docs_dir)
 

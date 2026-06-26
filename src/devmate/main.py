@@ -8,7 +8,11 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage
 
-from devmate.agent import create_devmate_agent, run_agent_once
+from devmate.agent import (
+    build_langsmith_run_config,
+    create_devmate_agent,
+    run_agent_once,
+)
 from devmate.config import load_config
 
 LOGGER = logging.getLogger(__name__)
@@ -63,6 +67,7 @@ async def invoke_agent_turn(
     agent: Any,
     messages: list[Any],
     user_input: str,
+    config_path: str,
 ) -> list[Any]:
     request_messages = [
         *messages,
@@ -72,7 +77,10 @@ async def invoke_agent_turn(
         },
     ]
 
-    result = await agent.ainvoke({"messages": request_messages})
+    result = await agent.ainvoke(
+        {"messages": request_messages},
+        config=build_langsmith_run_config(config_path),
+    )
     response = extract_last_message_content(result)
 
     if response:
@@ -104,6 +112,7 @@ async def run_interactive(
                 agent=agent,
                 messages=messages,
                 user_input=initial_prompt,
+                config_path=config_path,
             )
         except Exception:
             LOGGER.exception("Initial DevMate request failed.")
@@ -127,6 +136,7 @@ async def run_interactive(
                 agent=agent,
                 messages=messages,
                 user_input=user_input,
+                config_path=config_path,
             )
         except Exception:
             LOGGER.exception("DevMate request failed.")

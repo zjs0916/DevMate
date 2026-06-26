@@ -27,9 +27,12 @@ evaluating a multilingual embedding such as Ollama ``bge-m3``.
 
 Run after indexing the corpus::
 
+    PYTHONPATH=src uv run python scripts/preprocess_corpus.py \
+        --raw-dir rag_eval/raw --output-dir rag_eval/corpus
+
     PYTHONPATH=src uv run python -m devmate.index_docs \
         --config config.local.toml --docs-dir rag_eval/corpus \
-        --persist-dir .chroma_rag_eval
+        --persist-dir .chroma_rag_eval --reset
 
     PYTHONPATH=src uv run python scripts/test_rag_retrieval.py \
         --config config.local.toml --persist-dir .chroma_rag_eval --k 4
@@ -39,13 +42,18 @@ from __future__ import annotations
 
 import argparse
 import logging
-from dataclasses import dataclass, field
+import sqlite3
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from devmate.config import load_config
 from devmate.rag import search_knowledge_base
 
 LOGGER = logging.getLogger(__name__)
+
+FANREN_SOURCE_HINT = "凡人修仙传"
+DEFAULT_FANREN_SOURCE = "《凡人修仙传》（精校全本）作者：忘语....txt"
+PLAYER_HANDBOOK_SOURCE = "Player's Handbook.txt"
 
 
 @dataclass(frozen=True)
@@ -70,7 +78,7 @@ class RagQuestion:
 DEFAULT_QUESTIONS: list[RagQuestion] = [
     RagQuestion(
         question="韩立是谁引荐进入七玄门考验的？",
-        expected_source="fanren.txt",
+        expected_source=DEFAULT_FANREN_SOURCE,
         expected_keyword_groups=(
             ("韩立",),
             # 语料实际用「举荐」表达"引荐"，补上这个同义词（只加确实出现的词）。
@@ -80,7 +88,7 @@ DEFAULT_QUESTIONS: list[RagQuestion] = [
     ),
     RagQuestion(
         question="韩立的小绿瓶有什么作用？",
-        expected_source="fanren.txt",
+        expected_source=DEFAULT_FANREN_SOURCE,
         expected_keyword_groups=(
             ("小绿瓶", "小瓶", "瓶子", "瓶"),
             ("药草", "催熟", "灵药", "药材", "成熟"),
@@ -88,17 +96,17 @@ DEFAULT_QUESTIONS: list[RagQuestion] = [
     ),
     RagQuestion(
         question="D&D 中 advantage and disadvantage 是什么意思？",
-        expected_source="players_handbook.txt",
+        expected_source=PLAYER_HANDBOOK_SOURCE,
         expected_keywords_any=("advantage", "disadvantage", "higher", "lower", "d20"),
     ),
     RagQuestion(
         question="D&D ability modifier 怎么计算？",
-        expected_source="players_handbook.txt",
+        expected_source=PLAYER_HANDBOOK_SOURCE,
         expected_keywords_any=("ability modifier", "ability score", "modifier", "scores"),
     ),
     RagQuestion(
         question="D&D 1级角色的 proficiency bonus 是多少？",
-        expected_source="players_handbook.txt",
+        expected_source=PLAYER_HANDBOOK_SOURCE,
         expected_keywords_any=("proficiency bonus", "+2", "1st level", "1st"),
     ),
 ]
@@ -168,6 +176,52 @@ def expected_sources(questions: list[RagQuestion]) -> list[str]:
         if question.expected_source not in ordered:
             ordered.append(question.expected_source)
     return ordered
+
+
+def resolve_expected_sources(
+    questions: list[RagQuestion],
+    persist_dir: str,
+) -> list[RagQuestion]:
+    """Resolve source filenames from the Chroma index when raw identity varies."""
+
+    indexed_sources = _indexed_source_names(persist_dir)
+    fanren_source = _single_source_with_hint(indexed_sources, FANREN_SOURCE_HINT)
+
+    if not fanren_source:
+        return questions
+
+    return [
+        replace(question, expected_source=fanren_source)
+        if question.expected_source == DEFAULT_FANREN_SOURCE
+        else question
+        for question in questions
+    ]
+
+
+def _indexed_source_names(persist_dir: str) -> set[str]:
+    db_path = Path(persist_dir) / "chroma.sqlite3"
+    if not db_path.exists():
+        return set()
+
+    try:
+        with sqlite3.connect(db_path) as connection:
+            rows = connection.execute(
+                "SELECT DISTINCT string_value "
+                "FROM embedding_metadata "
+                "WHERE key='source' AND string_value IS NOT NULL",
+            ).fetchall()
+    except sqlite3.Error as exc:
+        LOGGER.warning("Could not inspect Chroma source metadata: %s", exc)
+        return set()
+
+    return {Path(row[0]).name for row in rows if row[0]}
+
+
+def _single_source_with_hint(source_names: set[str], hint: str) -> str | None:
+    matches = sorted(name for name in source_names if hint in name)
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 def parse_args() -> argparse.Namespace:
@@ -376,14 +430,19 @@ def main() -> None:
         LOGGER.error("Chroma index not found at: %s", persist_path)
         LOGGER.error("Build it first by running:")
         LOGGER.error(
+            "  PYTHONPATH=src uv run python scripts/preprocess_corpus.py "
+            "--raw-dir rag_eval/raw --output-dir rag_eval/corpus",
+        )
+        LOGGER.error(
             "  PYTHONPATH=src uv run python -m devmate.index_docs "
-            "--config %s --docs-dir rag_eval/corpus --persist-dir %s",
+            "--config %s --docs-dir rag_eval/corpus --persist-dir %s --reset",
             args.config,
             args.persist_dir,
         )
         raise SystemExit(1)
 
     config = load_config(args.config)
+    questions = resolve_expected_sources(DEFAULT_QUESTIONS, args.persist_dir)
 
     LOGGER.info(
         "Running RAG-only smoke / quality test (k=%d, persist_dir=%s)",
@@ -396,7 +455,7 @@ def main() -> None:
     LOGGER.info("")
 
     results: list[QuestionResult] = []
-    for index, question in enumerate(DEFAULT_QUESTIONS, start=1):
+    for index, question in enumerate(questions, start=1):
         result = run_question(question, config, args.persist_dir, args.k)
         results.append(result)
         log_result(index, result)
