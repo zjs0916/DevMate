@@ -1,123 +1,41 @@
-"""RAG-only smoke / quality test for DevMate's local knowledge base.
+"""RAG-only retrieval evaluation against an existing Chroma index.
 
-This script proves that local RAG retrieval works against the Chroma index
-built from ``rag_eval/corpus``. It calls ``search_knowledge_base`` from
-``devmate.rag`` directly:
-
-* it does NOT build a full agent,
-* it does NOT start the MCP server,
-* it does NOT call ``search_web`` / Tavily.
-
-Beyond a plain "did we retrieve something" check, each question also asserts:
-
-1. retrieval returned context at all,
-2. the top retrieved chunk comes from the expected source file,
-3. the retrieved text satisfies the keyword expectations — every
-   ``expected_keywords_all`` keyword present AND at least one
-   ``expected_keywords_any`` keyword present — so a source-file hit that does
-   not answer the question is reported instead of silently passing. Splitting
-   into ``_all`` (narrow anchor) and ``_any`` (discriminating terms) avoids
-   false positives from a broad word that matches almost any chunk in the file.
-
-Retrieval + source-file checks are always hard requirements (non-zero exit on
-failure). Keyword checks are reported and counted; by default a keyword miss is
-a loud WARNING (so the lightweight FastEmbed path still completes), and
-``--strict-keywords`` escalates keyword misses to failures — useful when
-evaluating a multilingual embedding such as Ollama ``bge-m3``.
-
-Run after indexing the corpus::
-
-    PYTHONPATH=src uv run python scripts/preprocess_corpus.py \
-        --raw-dir rag_eval/raw --output-dir rag_eval/corpus
-
-    PYTHONPATH=src uv run python -m devmate.index_docs \
-        --config config.local.toml --docs-dir rag_eval/corpus \
-        --persist-dir .chroma_rag_eval --reset
-
-    PYTHONPATH=src uv run python scripts/test_rag_retrieval.py \
-        --config config.local.toml --persist-dir .chroma_rag_eval --k 4
+The script calls ``search_knowledge_base`` directly. It does not build an
+agent, start MCP, or call Tavily.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
-import sqlite3
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from devmate.config import load_config
+from devmate.config import AppConfig, load_config
 from devmate.rag import search_knowledge_base
 
 LOGGER = logging.getLogger(__name__)
 
-FANREN_SOURCE_HINT = "凡人修仙传"
-DEFAULT_FANREN_SOURCE = "《凡人修仙传》（精校全本）作者：忘语....txt"
-PLAYER_HANDBOOK_SOURCE = "Player's Handbook.txt"
+DEFAULT_EVAL_CASES = Path("rag_eval/eval_cases.example.json")
+NO_RESULT_MARKER = "No relevant local documents found."
+PREVIEW_CHARS = 200
 
 
 @dataclass(frozen=True)
-class RagQuestion:
-    """A single retrieval test case with content-quality expectations."""
-
+class RagEvalCase:
     question: str
-    expected_source: str
-    # Three complementary, optional keyword rules, combined with AND:
-    # * ``_all``    — every keyword must appear.
-    # * ``_any``    — at least one keyword must appear.
-    # * ``_groups`` — AND-of-ORs: each group must contribute at least one hit.
-    # ``_groups`` is the most flexible: one group per concept, listing the
-    # synonyms the corpus might actually use (e.g. 小绿瓶/小瓶/瓶子/瓶). This keeps
-    # the check strict about *which concepts* are present without hard-binding a
-    # single exact phrase, and stops a broad word (e.g. 韩立) from passing alone.
+    expected_source: str | None = None
+    expected_source_contains: str | None = None
     expected_keywords_all: tuple[str, ...] = ()
     expected_keywords_any: tuple[str, ...] = ()
     expected_keyword_groups: tuple[tuple[str, ...], ...] = ()
 
 
-DEFAULT_QUESTIONS: list[RagQuestion] = [
-    RagQuestion(
-        question="韩立是谁引荐进入七玄门考验的？",
-        expected_source=DEFAULT_FANREN_SOURCE,
-        expected_keyword_groups=(
-            ("韩立",),
-            # 语料实际用「举荐」表达"引荐"，补上这个同义词（只加确实出现的词）。
-            ("引荐", "推荐", "介绍", "举荐"),
-            ("七玄门", "考验"),
-        ),
-    ),
-    RagQuestion(
-        question="韩立的小绿瓶有什么作用？",
-        expected_source=DEFAULT_FANREN_SOURCE,
-        expected_keyword_groups=(
-            ("小绿瓶", "小瓶", "瓶子", "瓶"),
-            ("药草", "催熟", "灵药", "药材", "成熟"),
-        ),
-    ),
-    RagQuestion(
-        question="D&D 中 advantage and disadvantage 是什么意思？",
-        expected_source=PLAYER_HANDBOOK_SOURCE,
-        expected_keywords_any=("advantage", "disadvantage", "higher", "lower", "d20"),
-    ),
-    RagQuestion(
-        question="D&D ability modifier 怎么计算？",
-        expected_source=PLAYER_HANDBOOK_SOURCE,
-        expected_keywords_any=("ability modifier", "ability score", "modifier", "scores"),
-    ),
-    RagQuestion(
-        question="D&D 1级角色的 proficiency bonus 是多少？",
-        expected_source=PLAYER_HANDBOOK_SOURCE,
-        expected_keywords_any=("proficiency bonus", "+2", "1st level", "1st"),
-    ),
-]
-
-PREVIEW_CHARS = 200
-NO_RESULT_MARKER = "No relevant local documents found."
-
-
 @dataclass
 class QuestionResult:
-    question: RagQuestion
+    case: RagEvalCase
     retrieved: bool
     top_source: str | None
     preview: str
@@ -128,105 +46,54 @@ class QuestionResult:
     group_matches: list[list[str]] = field(default_factory=list)
 
     @property
+    def source_applicable(self) -> bool:
+        return bool(self.case.expected_source or self.case.expected_source_contains)
+
+    @property
     def source_ok(self) -> bool:
-        return self.top_source == self.question.expected_source
+        if not self.source_applicable:
+            return True
+        if self.top_source is None:
+            return False
+        if self.case.expected_source is not None:
+            return self.top_source == self.case.expected_source
+        if self.case.expected_source_contains is not None:
+            return self.case.expected_source_contains in self.top_source
+        return True
 
     @property
     def keyword_applicable(self) -> bool:
-        question = self.question
+        case = self.case
         return bool(
-            question.expected_keywords_all
-            or question.expected_keywords_any
-            or question.expected_keyword_groups
+            case.expected_keywords_all
+            or case.expected_keywords_any
+            or case.expected_keyword_groups
         )
 
     @property
     def all_ok(self) -> bool:
-        # Every required keyword must be present (vacuously true when unset).
-        return not self.question.expected_keywords_all or not self.missing_all
+        return not self.case.expected_keywords_all or not self.missing_all
 
     @property
     def any_ok(self) -> bool:
-        # At least one keyword must be present (vacuously true when unset).
-        return not self.question.expected_keywords_any or bool(self.matched_any)
+        return not self.case.expected_keywords_any or bool(self.matched_any)
 
     @property
     def groups_ok(self) -> bool:
-        # AND-of-ORs: every group must contribute at least one matched keyword.
-        groups = self.question.expected_keyword_groups
-        if not groups:
-            return True
-        if len(self.group_matches) != len(groups):
-            return False
-        return all(bool(matched) for matched in self.group_matches)
+        groups = self.case.expected_keyword_groups
+        return not groups or (
+            len(self.group_matches) == len(groups)
+            and all(bool(matches) for matches in self.group_matches)
+        )
 
     @property
     def keyword_ok(self) -> bool:
         return self.all_ok and self.any_ok and self.groups_ok
 
-    @property
-    def passed(self) -> bool:
-        return self.retrieved and self.source_ok and self.keyword_ok
-
-
-def expected_sources(questions: list[RagQuestion]) -> list[str]:
-    """Unique expected source files, preserving first-seen order."""
-    ordered: list[str] = []
-    for question in questions:
-        if question.expected_source not in ordered:
-            ordered.append(question.expected_source)
-    return ordered
-
-
-def resolve_expected_sources(
-    questions: list[RagQuestion],
-    persist_dir: str,
-) -> list[RagQuestion]:
-    """Resolve source filenames from the Chroma index when raw identity varies."""
-
-    indexed_sources = _indexed_source_names(persist_dir)
-    fanren_source = _single_source_with_hint(indexed_sources, FANREN_SOURCE_HINT)
-
-    if not fanren_source:
-        return questions
-
-    return [
-        replace(question, expected_source=fanren_source)
-        if question.expected_source == DEFAULT_FANREN_SOURCE
-        else question
-        for question in questions
-    ]
-
-
-def _indexed_source_names(persist_dir: str) -> set[str]:
-    db_path = Path(persist_dir) / "chroma.sqlite3"
-    if not db_path.exists():
-        return set()
-
-    try:
-        with sqlite3.connect(db_path) as connection:
-            rows = connection.execute(
-                "SELECT DISTINCT string_value "
-                "FROM embedding_metadata "
-                "WHERE key='source' AND string_value IS NOT NULL",
-            ).fetchall()
-    except sqlite3.Error as exc:
-        LOGGER.warning("Could not inspect Chroma source metadata: %s", exc)
-        return set()
-
-    return {Path(row[0]).name for row in rows if row[0]}
-
-
-def _single_source_with_hint(source_names: set[str], hint: str) -> str | None:
-    matches = sorted(name for name in source_names if hint in name)
-    if len(matches) == 1:
-        return matches[0]
-    return None
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="RAG-only smoke / quality test for DevMate's local knowledge base.",
+        description="Evaluate local RAG retrieval against external JSON cases.",
     )
     parser.add_argument(
         "--config",
@@ -239,6 +106,11 @@ def parse_args() -> argparse.Namespace:
         help="Directory for the local Chroma vector database.",
     )
     parser.add_argument(
+        "--eval-cases",
+        default=str(DEFAULT_EVAL_CASES),
+        help="JSON file containing retrieval evaluation cases.",
+    )
+    parser.add_argument(
         "--k",
         type=int,
         default=4,
@@ -247,26 +119,133 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--strict-keywords",
         action="store_true",
-        help=(
-            "Treat a missing keyword (right source but no expected keyword in "
-            "the retrieved text) as a failure instead of a warning."
-        ),
+        help="Treat missing expected keywords as failures instead of warnings.",
     )
     return parser.parse_args()
 
 
-def _parse_documents(context: str) -> list[tuple[str | None, str]]:
-    """Split RAG output into ``(source_file, body)`` blocks.
+def load_eval_cases(path: str | Path) -> list[RagEvalCase]:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        raise ValueError("Eval cases JSON must be a list.")
 
-    ``search_knowledge_base`` returns documents formatted as::
+    cases = [_parse_eval_case(item, index) for index, item in enumerate(data, start=1)]
+    if not cases:
+        raise ValueError("Eval cases JSON must contain at least one case.")
+    return cases
 
-        Source: <path>, chunk: <n>
-        <content>
 
-        ---
+def _parse_eval_case(item: Any, index: int) -> RagEvalCase:
+    if not isinstance(item, dict):
+        raise ValueError(f"Eval case {index} must be an object.")
 
-        Source: ...
-    """
+    question = item.get("question")
+    if not isinstance(question, str) or not question.strip():
+        raise ValueError(f"Eval case {index} must include a non-empty question.")
+
+    expected_source = _optional_string(item, "expected_source", index)
+    expected_source_contains = _optional_string(
+        item,
+        "expected_source_contains",
+        index,
+    )
+    return RagEvalCase(
+        question=question,
+        expected_source=expected_source,
+        expected_source_contains=expected_source_contains,
+        expected_keywords_all=_string_tuple(item, "expected_keywords_all", index),
+        expected_keywords_any=_string_tuple(item, "expected_keywords_any", index),
+        expected_keyword_groups=_keyword_groups(item, index),
+    )
+
+
+def _optional_string(item: dict[str, Any], key: str, index: int) -> str | None:
+    value = item.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Eval case {index} field {key!r} must be a non-empty string.")
+    return value
+
+
+def _string_tuple(item: dict[str, Any], key: str, index: int) -> tuple[str, ...]:
+    value = item.get(key, [])
+    if not isinstance(value, list) or not all(
+        isinstance(entry, str) for entry in value
+    ):
+        raise ValueError(f"Eval case {index} field {key!r} must be a list of strings.")
+    return tuple(entry for entry in value if entry)
+
+
+def _keyword_groups(
+    item: dict[str, Any],
+    index: int,
+) -> tuple[tuple[str, ...], ...]:
+    value = item.get("expected_keyword_groups", [])
+    if not isinstance(value, list):
+        raise ValueError(
+            f"Eval case {index} field 'expected_keyword_groups' must be a list."
+        )
+
+    groups: list[tuple[str, ...]] = []
+    for group_index, group in enumerate(value, start=1):
+        if not isinstance(group, list) or not all(
+            isinstance(entry, str) for entry in group
+        ):
+            raise ValueError(
+                f"Eval case {index} keyword group {group_index} must be a list of strings."
+            )
+        cleaned = tuple(entry for entry in group if entry)
+        if cleaned:
+            groups.append(cleaned)
+    return tuple(groups)
+
+
+def run_question(
+    case: RagEvalCase,
+    config: AppConfig,
+    persist_dir: str | Path,
+    k: int,
+) -> QuestionResult:
+    context = search_knowledge_base(
+        query=case.question,
+        config=config,
+        persist_dir=persist_dir,
+        k=k,
+    )
+
+    if not context or context.strip() == NO_RESULT_MARKER:
+        return QuestionResult(
+            case=case,
+            retrieved=False,
+            top_source=None,
+            preview="",
+            missing_all=list(case.expected_keywords_all),
+        )
+
+    documents = parse_documents(context)
+    top_source = documents[0][0] if documents else None
+    preview = " ".join(documents[0][1].split())[:PREVIEW_CHARS] if documents else ""
+    covered = {source for source, _ in documents if source}
+    keyword_result = match_keywords(
+        "\n".join(body for _, body in documents),
+        case,
+    )
+
+    return QuestionResult(
+        case=case,
+        retrieved=True,
+        top_source=top_source,
+        preview=preview,
+        covered_sources=covered,
+        matched_all=keyword_result["matched_all"],
+        missing_all=keyword_result["missing_all"],
+        matched_any=keyword_result["matched_any"],
+        group_matches=keyword_result["group_matches"],
+    )
+
+
+def parse_documents(context: str) -> list[tuple[str | None, str]]:
     parsed: list[tuple[str | None, str]] = []
     for block in context.split("\n\n---\n\n"):
         lines = block.split("\n", 1)
@@ -275,177 +254,192 @@ def _parse_documents(context: str) -> list[tuple[str | None, str]]:
 
         source_file: str | None = None
         if header.startswith("Source:"):
-            raw_source = header[len("Source:"):].split(", chunk:", 1)[0].strip()
+            raw_source = header[len("Source:") :].split(", chunk:", 1)[0].strip()
             source_file = Path(raw_source).name
 
         parsed.append((source_file, body))
     return parsed
 
 
-def run_question(
-    question: RagQuestion,
-    config,
-    persist_dir: str,
-    k: int,
-) -> QuestionResult:
-    context = search_knowledge_base(
-        query=question.question,
-        config=config,
-        persist_dir=persist_dir,
-        k=k,
-    )
-
-    if not context or context.strip() == NO_RESULT_MARKER:
-        return QuestionResult(
-            question,
-            retrieved=False,
-            top_source=None,
-            preview="",
-            missing_all=list(question.expected_keywords_all),
-        )
-
-    documents = _parse_documents(context)
-    top_source = documents[0][0] if documents else None
-    preview = " ".join(documents[0][1].split())[:PREVIEW_CHARS] if documents else ""
-    covered = {source for source, _ in documents if source}
-
-    combined = "\n".join(body for _, body in documents).lower()
-    matched_all = [kw for kw in question.expected_keywords_all if kw.lower() in combined]
-    missing_all = [kw for kw in question.expected_keywords_all if kw.lower() not in combined]
-    matched_any = [kw for kw in question.expected_keywords_any if kw.lower() in combined]
-    group_matches = [
-        [kw for kw in group if kw.lower() in combined]
-        for group in question.expected_keyword_groups
+def match_keywords(text: str, case: RagEvalCase) -> dict[str, list[Any]]:
+    haystack = text.casefold()
+    matched_all = [
+        keyword
+        for keyword in case.expected_keywords_all
+        if keyword.casefold() in haystack
     ]
+    missing_all = [
+        keyword
+        for keyword in case.expected_keywords_all
+        if keyword.casefold() not in haystack
+    ]
+    matched_any = [
+        keyword
+        for keyword in case.expected_keywords_any
+        if keyword.casefold() in haystack
+    ]
+    group_matches = [
+        [keyword for keyword in group if keyword.casefold() in haystack]
+        for group in case.expected_keyword_groups
+    ]
+    return {
+        "matched_all": matched_all,
+        "missing_all": missing_all,
+        "matched_any": matched_any,
+        "group_matches": group_matches,
+    }
 
-    return QuestionResult(
-        question,
-        retrieved=True,
-        top_source=top_source,
-        preview=preview,
-        covered_sources=covered,
-        matched_all=matched_all,
-        missing_all=missing_all,
-        matched_any=matched_any,
-        group_matches=group_matches,
+
+def should_exit_with_failure(
+    results: list[QuestionResult],
+    *,
+    strict_keywords: bool,
+) -> bool:
+    structural_ok = all(
+        result.retrieved and (not result.source_applicable or result.source_ok)
+        for result in results
     )
+    keyword_ok = all(result.keyword_ok for result in results)
+    return not structural_ok or (strict_keywords and not keyword_ok)
 
 
 def log_result(index: int, result: QuestionResult) -> None:
-    question = result.question
-    LOGGER.info("[%d] question: %s", index, question.question)
+    case = result.case
+    LOGGER.info("[%d] question: %s", index, case.question)
     LOGGER.info("    retrieved: %s", "yes" if result.retrieved else "no")
-    LOGGER.info("    expected source: %s", question.expected_source)
-    LOGGER.info(
-        "    top source file: %s  (%s)",
-        result.top_source or "(none)",
-        "match" if result.source_ok else "MISMATCH",
-    )
-    if question.expected_keywords_all:
-        if result.all_ok:
-            LOGGER.info(
-                "    keywords (all): PASS (matched: %s)",
-                ", ".join(question.expected_keywords_all),
-            )
-        else:
-            LOGGER.warning(
-                "    keywords (all): WARN — missing required %s in retrieved text",
-                result.missing_all,
-            )
-    if question.expected_keywords_any:
-        if result.any_ok:
-            LOGGER.info(
-                "    keywords (any): PASS (matched: %s)",
-                ", ".join(result.matched_any),
-            )
-        else:
-            LOGGER.warning(
-                "    keywords (any): WARN — none of %s found in retrieved text",
-                list(question.expected_keywords_any),
-            )
-    for number, group in enumerate(question.expected_keyword_groups, start=1):
-        matched = result.group_matches[number - 1] if number - 1 < len(result.group_matches) else []
-        if matched:
-            LOGGER.info(
-                "    keyword group %d: PASS (matched: %s)",
-                number,
-                ", ".join(matched),
-            )
-        else:
-            LOGGER.warning(
-                "    keyword group %d: WARN — none of %s found in retrieved text",
-                number,
-                list(group),
-            )
+    if result.source_applicable:
+        LOGGER.info("    expected source: %s", _expected_source_label(case))
+        LOGGER.info(
+            "    top source file: %s  (%s)",
+            result.top_source or "(none)",
+            "match" if result.source_ok else "MISMATCH",
+        )
+    else:
+        LOGGER.info("    source check: skipped")
+    _log_keyword_result(result)
     LOGGER.info("    chunk preview: %s", result.preview or "(none)")
     LOGGER.info("")
 
 
+def _log_keyword_result(result: QuestionResult) -> None:
+    case = result.case
+    if case.expected_keywords_all:
+        if result.all_ok:
+            LOGGER.info("    keywords (all): PASS (%s)", ", ".join(result.matched_all))
+        else:
+            LOGGER.warning("    keywords (all): WARN missing %s", result.missing_all)
+    if case.expected_keywords_any:
+        if result.any_ok:
+            LOGGER.info("    keywords (any): PASS (%s)", ", ".join(result.matched_any))
+        else:
+            LOGGER.warning(
+                "    keywords (any): WARN none of %s matched",
+                list(case.expected_keywords_any),
+            )
+    for number, group in enumerate(case.expected_keyword_groups, start=1):
+        matched = (
+            result.group_matches[number - 1]
+            if number - 1 < len(result.group_matches)
+            else []
+        )
+        if matched:
+            LOGGER.info("    keyword group %d: PASS (%s)", number, ", ".join(matched))
+        else:
+            LOGGER.warning(
+                "    keyword group %d: WARN none of %s matched", number, list(group)
+            )
+
+
 def log_summary(results: list[QuestionResult], *, strict_keywords: bool) -> None:
     total = len(results)
-    with_context = sum(1 for r in results if r.retrieved)
-    source_passed = sum(1 for r in results if r.source_ok)
-    keyword_total = sum(1 for r in results if r.keyword_applicable)
-    keyword_passed = sum(1 for r in results if r.keyword_applicable and r.keyword_ok)
-    covered: set[str] = set()
-    for result in results:
-        covered |= result.covered_sources
+    with_context = sum(1 for result in results if result.retrieved)
+    source_total = sum(1 for result in results if result.source_applicable)
+    source_passed = sum(
+        1 for result in results if result.source_applicable and result.source_ok
+    )
+    keyword_total = sum(1 for result in results if result.keyword_applicable)
+    keyword_passed = sum(
+        1 for result in results if result.keyword_applicable and result.keyword_ok
+    )
+    covered_sources = sorted(
+        source
+        for result in results
+        for source in result.covered_sources
+        if source is not None
+    )
 
     LOGGER.info("=" * 60)
     LOGGER.info("Summary")
     LOGGER.info("=" * 60)
     LOGGER.info("total questions:           %d", total)
     LOGGER.info("questions with context:    %d / %d", with_context, total)
-    LOGGER.info("source checks passed:      %d / %d", source_passed, total)
+    LOGGER.info("source checks passed:      %d / %d", source_passed, source_total)
     LOGGER.info("keyword checks passed:     %d / %d", keyword_passed, keyword_total)
-    LOGGER.info("sources covered:")
-    for source in expected_sources([r.question for r in results]):
-        mark = "yes" if source in covered else "no"
-        LOGGER.info("    %s: %s", source, mark)
+    LOGGER.info("covered sources:")
+    for source in dict.fromkeys(covered_sources):
+        LOGGER.info("    %s", source)
 
-    if keyword_passed < keyword_total:
-        missed = keyword_total - keyword_passed
+    failures = failed_case_details(results, strict_keywords=strict_keywords)
+    if failures:
         LOGGER.warning("")
-        LOGGER.warning(
-            "%d question(s) failed the keyword check "
-            "(missing a required keyword, or no expected keyword matched).",
-            missed,
-        )
-        if strict_keywords:
-            LOGGER.warning("--strict-keywords is set: these count as failures.")
-        else:
+        LOGGER.warning("failed cases details:")
+        for detail in failures:
+            LOGGER.warning("    %s", detail)
+        if not strict_keywords:
             LOGGER.warning(
-                "Re-run with --strict-keywords to fail on low retrieval quality, or "
-                "use a multilingual embedding (Ollama bge-m3) for CJK corpora.",
+                "keyword misses are warnings; add --strict-keywords to fail."
             )
+
+
+def failed_case_details(
+    results: list[QuestionResult],
+    *,
+    strict_keywords: bool,
+) -> list[str]:
+    details: list[str] = []
+    for index, result in enumerate(results, start=1):
+        if not result.retrieved:
+            details.append(f"[{index}] no context: {result.case.question}")
+            continue
+        if result.source_applicable and not result.source_ok:
+            details.append(
+                f"[{index}] source mismatch: expected {_expected_source_label(result.case)}, "
+                f"got {result.top_source or '(none)'}"
+            )
+        if result.keyword_applicable and not result.keyword_ok:
+            label = "keyword failure" if strict_keywords else "keyword warning"
+            details.append(f"[{index}] {label}: {result.case.question}")
+    return details
+
+
+def _expected_source_label(case: RagEvalCase) -> str:
+    if case.expected_source is not None:
+        return case.expected_source
+    if case.expected_source_contains is not None:
+        return f"*{case.expected_source_contains}*"
+    return "(none)"
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-
     args = parse_args()
 
     persist_path = Path(args.persist_dir)
     if not persist_path.exists():
         LOGGER.error("Chroma index not found at: %s", persist_path)
-        LOGGER.error("Build it first by running:")
-        LOGGER.error(
-            "  PYTHONPATH=src uv run python scripts/preprocess_corpus.py "
-            "--raw-dir rag_eval/raw --output-dir rag_eval/corpus",
-        )
-        LOGGER.error(
-            "  PYTHONPATH=src uv run python -m devmate.index_docs "
-            "--config %s --docs-dir rag_eval/corpus --persist-dir %s --reset",
-            args.config,
-            args.persist_dir,
-        )
+        LOGGER.error("Build it first with devmate.index_docs.")
         raise SystemExit(1)
 
-    config = load_config(args.config)
-    questions = resolve_expected_sources(DEFAULT_QUESTIONS, args.persist_dir)
+    try:
+        cases = load_eval_cases(args.eval_cases)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        LOGGER.error("Could not load eval cases from %s: %s", args.eval_cases, exc)
+        raise SystemExit(1) from exc
 
+    config = load_config(args.config)
     LOGGER.info(
-        "Running RAG-only smoke / quality test (k=%d, persist_dir=%s)",
+        "Running RAG-only retrieval evaluation (cases=%s, k=%d, persist_dir=%s)",
+        args.eval_cases,
         args.k,
         args.persist_dir,
     )
@@ -455,17 +449,13 @@ def main() -> None:
     LOGGER.info("")
 
     results: list[QuestionResult] = []
-    for index, question in enumerate(questions, start=1):
-        result = run_question(question, config, args.persist_dir, args.k)
+    for index, case in enumerate(cases, start=1):
+        result = run_question(case, config, args.persist_dir, args.k)
         results.append(result)
         log_result(index, result)
 
     log_summary(results, strict_keywords=args.strict_keywords)
-
-    structural_ok = all(r.retrieved and r.source_ok for r in results)
-    keywords_ok = all(r.keyword_ok for r in results)
-
-    if not structural_ok or (args.strict_keywords and not keywords_ok):
+    if should_exit_with_failure(results, strict_keywords=args.strict_keywords):
         raise SystemExit(1)
 
 

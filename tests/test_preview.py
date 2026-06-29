@@ -134,7 +134,9 @@ def test_preview_disabled_returns_early(tmp_path: Path) -> None:
     project.mkdir()
     (project / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     (project / "src").mkdir()
-    (project / "src" / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n")
+    (project / "src" / "main.py").write_text(
+        "from fastapi import FastAPI\napp = FastAPI()\n"
+    )
 
     cfg = _make_preview_cfg(gen_dir, enabled=False)
     result = start_fastapi_preview(str(project), cfg)

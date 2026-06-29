@@ -33,9 +33,7 @@ def create_file_tools() -> list[BaseTool]:
         if not PROJECT_OUTPUT_DIR.exists():
             return "No generated project files found."
 
-        paths = sorted(
-            path for path in PROJECT_OUTPUT_DIR.rglob("*") if path.is_file()
-        )
+        paths = sorted(path for path in PROJECT_OUTPUT_DIR.rglob("*") if path.is_file())
 
         if not paths:
             return "No generated project files found."

@@ -1,0 +1,18 @@
+[
+  {
+    "question": "韩立的小绿瓶有什么作用？",
+    "expected_source_contains": "凡人修仙传",
+    "expected_keyword_groups": [
+      ["小绿瓶", "小瓶", "瓶子", "瓶"],
+      ["药草", "催熟", "灵药", "药材", "成熟"]
+    ]
+  },
+  {
+    "question": "D&D 中 advantage 和 disadvantage 是什么意思？",
+    "expected_source_contains": "Player's Handbook",
+    "expected_keyword_groups": [
+      ["advantage", "disadvantage"],
+      ["higher", "lower", "d20"]
+    ]
+  }
+]

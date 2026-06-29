@@ -25,4 +25,6 @@ VERIFY_REPORT.md
 # RAG evaluation data (large local corpora, not for commit)
 rag_eval/corpus/
 rag_eval/corpus_test/
+rag_eval/corpus_manifest.json
+rag_eval/corpus_manifest.jsonl
 rag_eval/raw/

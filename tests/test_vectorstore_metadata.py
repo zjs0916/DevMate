@@ -52,23 +52,37 @@ def _make_config(provider: str, model: str, dimensions: int) -> AppConfig:
 def test_signature_written_and_read(tmp_path: Path) -> None:
     config = _make_config("fastembed", "BAAI/bge-small-en-v1.5", 384)
 
-    write_embedding_signature(tmp_path, config)
+    write_embedding_signature(
+        tmp_path,
+        config,
+        chunk_size=900,
+        chunk_overlap=120,
+        corpus_manifest_sha256="abc123",
+    )
 
     sig_path = tmp_path / SIGNATURE_FILENAME
     assert sig_path.exists()
     stored = json.loads(sig_path.read_text(encoding="utf-8"))
-    assert stored == build_embedding_signature(config)
+    assert stored == build_embedding_signature(
+        config,
+        chunk_size=900,
+        chunk_overlap=120,
+        corpus_manifest_sha256="abc123",
+    )
     assert stored["embedding_provider"] == "fastembed"
     assert stored["embedding_model_name"] == "BAAI/bge-small-en-v1.5"
     assert stored["embedding_dimensions"] == 384
+    assert stored["chunk_size"] == 900
+    assert stored["chunk_overlap"] == 120
+    assert stored["corpus_manifest_sha256"] == "abc123"
 
 
 def test_matching_signature_validates_silently(tmp_path: Path) -> None:
     config = _make_config("fastembed", "BAAI/bge-small-en-v1.5", 384)
-    write_embedding_signature(tmp_path, config)
+    write_embedding_signature(tmp_path, config, chunk_size=900, chunk_overlap=120)
 
     # Should not raise.
-    validate_embedding_signature(tmp_path, config)
+    validate_embedding_signature(tmp_path, config, chunk_size=900, chunk_overlap=120)
 
 
 def test_dimension_mismatch_raises(tmp_path: Path) -> None:
@@ -86,3 +100,24 @@ def test_missing_signature_does_not_raise(tmp_path: Path) -> None:
 
     # No signature file present at all -> should be tolerant (warning only).
     validate_embedding_signature(tmp_path, config)
+
+
+def test_extra_stored_signature_fields_do_not_break_runtime_validation(
+    tmp_path: Path,
+) -> None:
+    config = _make_config("fastembed", "BAAI/bge-small-en-v1.5", 384)
+    write_embedding_signature(tmp_path, config, chunk_size=900, chunk_overlap=120)
+
+    validate_embedding_signature(tmp_path, config)
+
+
+def test_chunk_mismatch_raises_when_indexing_context_is_supplied(
+    tmp_path: Path,
+) -> None:
+    config = _make_config("fastembed", "BAAI/bge-small-en-v1.5", 384)
+    write_embedding_signature(tmp_path, config, chunk_size=900, chunk_overlap=120)
+
+    with pytest.raises(RuntimeError, match="different embedding configuration"):
+        validate_embedding_signature(
+            tmp_path, config, chunk_size=1200, chunk_overlap=120
+        )

@@ -56,9 +56,7 @@ def start_fastapi_preview(project_path: str, preview_cfg: PreviewConfig) -> str:
     resolved = Path(project_path).resolve()
 
     if generated_dir not in resolved.parents and resolved != generated_dir:
-        return (
-            f"Error: project_path must be inside {generated_dir}. Got: {resolved}"
-        )
+        return f"Error: project_path must be inside {generated_dir}. Got: {resolved}"
 
     if not (resolved / "pyproject.toml").exists():
         return f"Error: {resolved / 'pyproject.toml'} not found."
@@ -117,16 +115,14 @@ def start_fastapi_preview(project_path: str, preview_cfg: PreviewConfig) -> str:
         proc.terminate()
         del _PREVIEWS[key]
         return (
-            f"Error: Preview did not respond within 10 seconds. "
-            f"Check logs: {log_path}"
+            f"Error: Preview did not respond within 10 seconds. Check logs: {log_path}"
         )
 
     if status >= 500:
         proc.terminate()
         del _PREVIEWS[key]
         return (
-            f"Error: Preview started but returned HTTP {status}. "
-            f"Check logs: {log_path}"
+            f"Error: Preview started but returned HTTP {status}. Check logs: {log_path}"
         )
 
     if preview_cfg.open_browser and not _is_in_docker():

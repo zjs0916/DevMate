@@ -342,15 +342,16 @@ PYTHONPATH=src uv run python -m devmate.main --config config.local.toml "请构�
 
 ## Docker Compose 运行方式
 
-Docker Compose 版本用于展示完整交互式运行环境，包含三个服务：
+Docker Compose 版本用于展示完整交互式运行环境，包含四个服务：
 
 | 服务 | 作用 |
 |------|------|
 | `mcp-search` | Streamable HTTP MCP 搜索服务（Tavily），监听 `:8765` |
+| `preprocess-corpus` | 一次性任务，把 `rag_eval/raw/` 里的原始文件生成 corpus |
 | `index-docs` | 一次性任务，构建本地 Chroma 向量库 |
 | `devmate` | 交互式 Agent，通过 `http://mcp-search:8765/mcp` 调用搜索 |
 
-三个服务共享同一个镜像（`devmate:local`），并把仓库目录挂载进容器，
+四个服务共享同一个镜像（`devmate:local`），并把仓库目录挂载进容器，
 因此 `generated_projects/`、`.chroma/`、`.fastembed_cache/` 与宿主机共享。
 
 > **关于配置：** 仓库中提交的 `config.toml` 只是**示例配置**，里面的
@@ -420,12 +421,13 @@ DEVMATE_CONFIG=config.docker.toml docker compose run --rm devmate
 Docker Compose 的重点是：
 
 * `stdin_open: true` / `tty: true` — 支持交互式输入
-* `index-docs` 服务自动构建本地知识库（Chroma 向量库）
+* `preprocess-corpus` 服务先生成 `rag_eval/corpus/` 和 manifest
+* `index-docs` 服务在预处理成功后构建本地知识库（Chroma 向量库）
 * `mcp-search` 服务独立运行 MCP Search Server，`devmate` 通过服务名
   `mcp-search` 连接（`DEVMATE_MCP_HOST=mcp-search`）
 * 支持 `DEVMATE_CONFIG` 环境变量覆盖配置文件路径（所有服务共享同一份 config）
 
-**注意：** Docker Compose 负责启动 `mcp-search`、`index-docs` 和 `devmate` 三个服务。
+**注意：** Docker Compose 负责启动 `mcp-search`、`preprocess-corpus`、`index-docs` 和 `devmate`。
 在 Docker 环境中，preview 会自动启动 uvicorn 并返回 URL，但不会尝试打开宿主机浏览器（容器无法控制宿主机）。
 如需访问生成的网站，需要将 Docker 容器端口映射到宿主机，或使用本地运行模式（自动打开浏览器仅在本地模式下有效）。
 
@@ -484,172 +486,169 @@ curl http://127.0.0.1:8000/api/trails
 
 ## 本地 RAG 工作流程
 
-本地 RAG 的流程是：
+DevMate 的本地 RAG 由三步组成：
 
 ```text
-docs/
-  ↓
-文档切分
-  ↓
-FastEmbed BAAI/bge-small-en-v1.5 semantic embedding（384 维）
-  ↓
-Chroma vector store
-  ↓
-search_knowledge_base 工具
-  ↓
-Agent 任务执行
+raw txt / md / pdf
+  -> preprocessing
+  -> UTF-8 corpus txt + manifest
+  -> Chroma index
+  -> search_knowledge_base
 ```
 
-文档索引入口：
+核心入口：
 
-```text
-src/devmate/index_docs.py
-```
+* `scripts/preprocess_corpus.py`：把原始 `.txt` / `.md` / `.pdf` 转成 UTF-8 corpus。
+* `src/devmate/index_docs.py`：切分 corpus 并写入 Chroma。
+* `scripts/test_rag_retrieval.py`：读取外部 eval cases，直接调用 `search_knowledge_base` 做 RAG-only 检索验证。
 
-检索逻辑：
-
-```text
-src/devmate/rag.py
-```
-
-本项目的文档切分采用边界感知策略，优先按 Markdown 标题、段落和句子切分，避免直接硬截断语义单元。
+文档切分优先使用 Markdown 标题，其次使用段落和句子；超长段落再按字符切分。索引 metadata 会记录来源文件、chunk index、稳定 chunk id、内容 hash，以及 manifest 可提供的 PDF 页码信息。
 
 ---
 
-## RAG-only smoke test
+## Generic RAG preprocessing
 
-`scripts/test_rag_retrieval.py` 是一个可复现的本地知识库检索冒烟测试，用来证明 RAG 检索正常工作。
-
-它直接调用 `src/devmate/rag.py` 的 `search_knowledge_base`，**不构建完整 Agent、不启动 MCP server、不调用 `search_web` / Tavily**——所以可以在纯离线、无网络搜索的情况下验证本地检索。
-
-> **关于语料：** `rag_eval/raw/` 是**原始测试文件目录**，用于放置未手工改名/改内容的测试集原件，例如 `《凡人修仙传》（精校全本）作者：忘语....txt` 和 `Player's Handbook.pdf`。`rag_eval/raw/` 和 `rag_eval/corpus/` 都是本地大文件/生成产物目录，已在 `.gitignore` 中排除，不提交到 GitHub。
-
-### 1. 预处理
-
-RAG eval 流程：
+把原始文件放在：
 
 ```text
-rag_eval/raw/ 原始测试文件
-  -> scripts/preprocess_corpus.py 自动生成 rag_eval/corpus/
-  -> index_docs.py 建 Chroma
-  -> test_rag_retrieval.py 做 source + keyword groups 检查
+rag_eval/raw/
 ```
 
-预处理脚本把 `rag_eval/raw/` 里的原始测试文件自动转换为 RAG corpus。文件名由代码生成：中文小说保留原始中文文件名，`Player's Handbook.pdf` 抽取为 `Player's Handbook.txt`。
+运行预处理：
 
 ```bash
 PYTHONPATH=src uv run python scripts/preprocess_corpus.py \
     --raw-dir rag_eval/raw \
-    --output-dir rag_eval/corpus
+    --output-dir rag_eval/corpus \
+    --manifest rag_eval/corpus_manifest.jsonl \
+    --recursive \
+    --clean-output
 ```
 
-处理流程：
-
-* 中文 TXT：统一 UTF-8、清理 BOM、统一换行、压缩多余空行，不翻译、不总结、不改写正文。
-* Player's Handbook PDF：用 `pypdf` 抽取文本，输出 `Player's Handbook.txt`，再做基础换行/空白/明显页码页眉页脚清理。
-
-输出示例：
+输出：
 
 ```text
-rag_eval/corpus/《凡人修仙传》（精校全本）作者：忘语....txt
-rag_eval/corpus/Player's Handbook.txt
+rag_eval/corpus/
+rag_eval/corpus_manifest.jsonl
 ```
 
-### 2. 建索引
+预处理规则是确定性的：编码容错读取、去 BOM、统一换行、去不可见控制字符、压缩多余空行；PDF 使用 `pypdf` 抽取文本并做通用页码/重复页眉页脚清理。脚本不翻译、不总结、不改写正文，也不会把文件改成固定标准名。`.md` 和 `.pdf` 会输出为同 stem 的 `.txt`；如果输出文件名冲突，会追加稳定短 hash。
 
-RAG eval 使用独立的索引目录 `.chroma_rag_eval`，不影响 Agent 默认使用的 `.chroma`：
+常用参数：
+
+* `--include "*.txt" --include "*.pdf"`：限制输入类型或路径。
+* `--exclude "__MACOSX/*"`：排除额外路径。
+* `--recursive`：递归扫描 raw 目录。
+* `--clean-output`：重建 corpus 输出目录。
+
+`rag_eval/raw/`、`rag_eval/corpus/`、`rag_eval/corpus_manifest.jsonl` 都是本地数据或生成产物，不提交到 Git。
+
+---
+
+## Indexing
+
+RAG eval 建议使用独立索引目录，避免影响 Agent 默认的 `.chroma`：
 
 ```bash
 PYTHONPATH=src uv run python -m devmate.index_docs \
     --config config.local.toml \
     --docs-dir rag_eval/corpus \
     --persist-dir .chroma_rag_eval \
+    --manifest rag_eval/corpus_manifest.jsonl \
+    --chunk-size 900 \
+    --chunk-overlap 120 \
     --reset
 ```
 
-### 3. 运行测试
-
-```bash
-PYTHONPATH=src uv run python scripts/test_rag_retrieval.py \
-    --config config.local.toml --persist-dir .chroma_rag_eval --k 4
-```
-
-支持参数：
-
-* `--config`：配置文件路径（默认 `config.local.toml`）
-* `--persist-dir`：Chroma 索引目录（默认 `.chroma`）
-* `--k`：每个问题检索的 chunk 数量（默认 `4`）
-* `--strict-keywords`：把"命中正确文件但关键词检查没全过"也判为失败（默认只 warning）
-
-每个问题除了检查**是否检索到内容**和 **top source file 是否匹配 expected source**，还会对检索到的文本做关键词检查，发现"文件命中但 chunk 没真正回答问题"的情况，而不是静默算通过。每个问题支持三种关键词字段（都可选，按 AND 组合）：
-
-* `expected_keywords_all`：列表里的关键词**必须全部**出现；
-* `expected_keywords_any`：列表里**至少命中一个**；
-* `expected_keyword_groups`：**分组（AND-of-ORs）**——每个 group 至少命中一个关键词。
-
-`expected_keyword_groups` 最灵活、也最能避免假阳性：一个 group 对应一个"概念"，里面列出语料可能用到的同义词。例如中文问题"小绿瓶"的相关段落实际可能写成"小瓶 / 瓶子 / 瓶"，所以把它们放进同一个 group，既保证"概念命中"，又不会因为死绑"小绿瓶"这一个精确词而误判;同时把太宽的词（如"韩立"，几乎每个中文小说 chunk 都出现）单独成组，使它无法独自放行整道题。
-
-输出 summary 分别显示：`source checks passed: X / total` 和 `keyword checks passed: X / total`，以及覆盖的来源 `《凡人修仙传》（精校全本）作者：忘语....txt` / `Player's Handbook.txt`。
-
-判定规则：
-
-* 检索失败或 source 不匹配 → 直接失败（退出码非 0）
-* 关键词检查没全过（`all` 缺词 / `any` 一个都没中 / 某个 group 全落空）→ 默认打印 **WARN**，退出码仍为 0；加 `--strict-keywords` 后升级为失败（退出码 1）
-
-> **关于中文检索质量：** 默认 FastEmbed `BAAI/bge-small-en-v1.5` 是英文 embedding，对中文/中英混合语料（如《凡人修仙传》+ Player's Handbook）关键词命中可能不稳定。如果中文问题出现 keyword WARN，建议改用多语言 embedding（见下方 [Optional multilingual RAG evaluation with bge-m3](#optional-multilingual-rag-evaluation-with-bge-m3)）。
-
-如果索引目录不存在，会提示先运行上面的建索引命令。
-
-### 为什么这个测试不需要 MCP server
-
-MCP server 只负责网络搜索（`search_web` → Tavily）。本地 RAG 检索完全发生在本地 Chroma 向量库与 FastEmbed embedding 之间，不经过任何网络搜索路径。该脚本只调用 `search_knowledge_base`，因此无需启动 MCP server，也不会触发 Tavily 调用。
-
-> 注意：`rag_eval/raw/`、`rag_eval/corpus/` 和 `.chroma_rag_eval` 属于本地数据/索引产物，已在 `.gitignore` 中排除，不提交到 GitHub。代码支持用户把原始测试文件放到 `rag_eval/raw/` 后一键预处理。
+`--reset` 会先删除旧索引，避免旧 Chroma metadata、chunk 参数或 embedding 维度残留。索引签名记录 embedding provider、model、dimensions、chunk 参数和 corpus manifest hash；这些输入变化后应重建索引。
 
 ---
 
-## Optional multilingual RAG evaluation with bge-m3
+## Evaluation
 
-默认 embedding 是 FastEmbed `BAAI/bge-small-en-v1.5`（384 维）。它**轻量、无需 Ollama**，clone 后 / Docker 里 / 本地都能直接跑通，适合项目规范、README、coding docs 这类英文文档——所以它是项目默认路径，`config.toml` 不会改成 bge-m3。
+`scripts/test_rag_retrieval.py` 是 RAG-only eval：不构建 Agent、不启动 MCP、不调用 Tavily，只调用 `search_knowledge_base`。
 
-但它是英文 embedding。**如果测试语料包含中文或中英混合文档**（例如《凡人修仙传》+ Player's Handbook），中文问题的检索质量会不稳定（`test_rag_retrieval.py` 可能报 keyword WARN）。这种情况下建议改用多语言 embedding **Ollama `bge-m3`（1024 维）**做一次性的 RAG eval，而**不改动主项目默认配置**。
+默认读取：
 
-> **必须重建 Chroma：** FastEmbed（384 维）和 bge-m3（1024 维）维度不兼容，切换 `embedding_provider` / `embedding_model_name` / `embedding_dimensions` 后**必须删除旧索引**再重建，否则维度冲突：
->
-> ```bash
-> rm -rf .chroma .chroma_rag_eval .skills/.chroma
-> ```
+```text
+rag_eval/eval_cases.example.json
+```
 
-本地运行多语言 RAG eval：
+运行：
 
 ```bash
-# 1. 启动 Ollama 并拉取 bge-m3
+PYTHONPATH=src uv run python scripts/test_rag_retrieval.py \
+    --config config.local.toml \
+    --persist-dir .chroma_rag_eval \
+    --eval-cases rag_eval/eval_cases.example.json \
+    --k 4
+```
+
+Eval case 支持：
+
+* `question`
+* `expected_source`：要求 top source 文件名精确匹配。
+* `expected_source_contains`：要求 top source 文件名包含指定字符串。
+* `expected_keywords_all`：全部关键词都要出现。
+* `expected_keywords_any`：至少出现一个关键词。
+* `expected_keyword_groups`：AND-of-ORs，每组至少命中一个关键词。
+
+检索失败或 source 检查失败会返回非 0。关键词缺失默认是 warning；加 `--strict-keywords` 后会返回非 0。示例 eval cases 可以引用本地示例数据集，例如中文小说文本或规则手册 PDF；用户也可以为任意 corpus 提供自己的 `eval_cases.json`。
+
+---
+
+## Multilingual note
+
+默认 FastEmbed `BAAI/bge-small-en-v1.5` 轻量、易部署，适合英文项目文档和一般 coding docs。中文或多语言 corpus 建议使用多语言 embedding，例如 Ollama `bge-m3`（常见 1024 维）。这是模型选择问题，不是针对某个数据集的补丁。
+
+切换 embedding provider、model 或 dimensions 后必须重建索引：
+
+```bash
+rm -rf .chroma .chroma_rag_eval .skills/.chroma
+```
+
+本地多语言 eval 示例：
+
+```bash
 brew services start ollama
 ollama pull bge-m3
-
-# 2. 从 example 复制一份真实 eval 配置（config.rag_eval.ollama.toml 不提交）
 cp config.rag_eval.ollama.example.toml config.rag_eval.ollama.toml
 
-# 3. 从 rag_eval/raw/ 生成 RAG corpus
 PYTHONPATH=src uv run python scripts/preprocess_corpus.py \
-    --raw-dir rag_eval/raw --output-dir rag_eval/corpus
+    --raw-dir rag_eval/raw \
+    --output-dir rag_eval/corpus \
+    --manifest rag_eval/corpus_manifest.jsonl \
+    --recursive \
+    --clean-output
 
-# 4. 用 bge-m3 重建独立的 eval 索引
 PYTHONPATH=src uv run python -m devmate.index_docs \
     --config config.rag_eval.ollama.toml \
-    --docs-dir rag_eval/corpus --persist-dir .chroma_rag_eval --reset
+    --docs-dir rag_eval/corpus \
+    --persist-dir .chroma_rag_eval \
+    --manifest rag_eval/corpus_manifest.jsonl \
+    --reset
 
-# 5. 跑检索质量测试（中文关键词也应命中）
 PYTHONPATH=src uv run python scripts/test_rag_retrieval.py \
     --config config.rag_eval.ollama.toml \
     --persist-dir .chroma_rag_eval \
+    --eval-cases rag_eval/eval_cases.example.json \
     --k 4 \
     --strict-keywords
 ```
 
-> **在 Docker 里跑这个 eval：** 如果 Docker 容器要调用 Mac 本机的 Ollama，`config.rag_eval.ollama.toml` 里的 `embedding_base_url` 要改成 `http://host.docker.internal:11434`（容器内的 `127.0.0.1` 指向容器自身，不是 Mac 本机）。
+Docker 容器调用 Mac 本机 Ollama 时，配置里的 `embedding_base_url` 应使用 `http://host.docker.internal:11434`。
 
-`config.rag_eval.ollama.toml`、`.chroma_rag_eval`、`rag_eval/corpus/`、`rag_eval/raw/`、`.fastembed_cache` 以及任何真实 API key 都已在 `.gitignore` 中排除，不提交到 GitHub。
+---
+
+## Docker RAG path
+
+```bash
+docker compose run --rm preprocess-corpus
+docker compose run --rm index-docs
+docker compose run --rm devmate
+```
+
+`preprocess-corpus` 和 `index-docs` 都是 one-shot job；`devmate` 只在 `index-docs` 成功完成后启动，不会和 indexing 同时写 `.chroma`。
 
 ---
 

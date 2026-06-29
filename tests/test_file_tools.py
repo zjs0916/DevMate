@@ -31,7 +31,9 @@ def test_absolute_path_escape_is_rejected() -> None:
 
 def test_write_tool_blocks_traversal(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Point the output root at an isolated temp dir to avoid touching the repo.
-    monkeypatch.setattr(file_tools, "PROJECT_OUTPUT_DIR", tmp_path / "generated_projects")
+    monkeypatch.setattr(
+        file_tools, "PROJECT_OUTPUT_DIR", tmp_path / "generated_projects"
+    )
     write_tool, _read_tool, _list_tool = file_tools.create_file_tools()
 
     with pytest.raises(ValueError):

@@ -18,7 +18,7 @@ x-common: &common
     - .:/app
   environment: &common-env
     PYTHONPATH: src
-    DEVMATE_CONFIG: ${DEVMATE_CONFIG:-config.toml}
+    DEVMATE_CONFIG: ${DEVMATE_CONFIG:-config.docker.toml}
     # Default 0: allow the first run to download the FastEmbed model. Set
     # HF_HUB_OFFLINE=1 to force a fully offline run once the model is cached.
     HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
@@ -60,6 +60,10 @@ services:
       - ${RAG_RAW_DIR:-rag_eval/raw}
       - --output-dir
       - ${RAG_CORPUS_DIR:-rag_eval/corpus}
+      - --manifest
+      - ${RAG_MANIFEST:-rag_eval/corpus_manifest.jsonl}
+      - --recursive
+      - --clean-output
 
   index-docs:
     <<: *common
@@ -73,11 +77,13 @@ services:
       - -m
       - devmate.index_docs
       - --config
-      - ${DEVMATE_CONFIG:-config.toml}
+      - ${DEVMATE_CONFIG:-config.docker.toml}
       - --docs-dir
       - ${RAG_CORPUS_DIR:-rag_eval/corpus}
       - --persist-dir
       - .chroma
+      - --manifest
+      - ${RAG_MANIFEST:-rag_eval/corpus_manifest.jsonl}
       - --reset
 
   devmate:
@@ -95,4 +101,4 @@ services:
         condition: service_completed_successfully
     stdin_open: true
     tty: true
-    command: uv run python -m devmate.main --config ${DEVMATE_CONFIG:-config.toml} --interactive
+    command: uv run python -m devmate.main --config ${DEVMATE_CONFIG:-config.docker.toml} --interactive

@@ -15,7 +15,11 @@ generated_projects/
 .skills/.chroma/
 
 # Large local corpora and host-only secrets (never bake into the image)
-rag_eval/
+rag_eval/raw/
+rag_eval/corpus/
+rag_eval/corpus_test/
+rag_eval/corpus_manifest.json
+rag_eval/corpus_manifest.jsonl
 config.docker.toml
 config.local.*
 *.png

@@ -1,8 +1,8 @@
 # Optional multilingual RAG-eval config example (Ollama bge-m3, 1024 dims).
 #
-# This is an OPTIONAL evaluation path for Chinese / mixed CN-EN corpora
-# (e.g. fanren.txt + players_handbook.txt). The project default stays on
-# FastEmbed BAAI/bge-small-en-v1.5 (384 dims) — see config.toml.
+# This is an OPTIONAL evaluation path for Chinese or multilingual corpora.
+# The project default stays on FastEmbed BAAI/bge-small-en-v1.5 (384 dims)
+# — see config.toml.
 #
 # Usage:
 #   cp config.rag_eval.ollama.example.toml config.rag_eval.ollama.toml

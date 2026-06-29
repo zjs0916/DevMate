@@ -49,7 +49,9 @@ def test_skill_frontmatter_is_valid(skill_path: Path) -> None:
     assert "description" in meta, f"{parent_name}: missing 'description'"
 
     name = meta["name"]
-    assert NAME_RE.match(name), f"{parent_name}: name '{name}' is not lowercase/digits/hyphen"
+    assert NAME_RE.match(name), (
+        f"{parent_name}: name '{name}' is not lowercase/digits/hyphen"
+    )
     assert name == parent_name, (
         f"name '{name}' must match parent directory '{parent_name}'"
     )

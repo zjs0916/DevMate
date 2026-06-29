@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import argparse
 import logging
-import shutil
 from pathlib import Path
 
 from devmate.config import load_config
-from devmate.rag import build_knowledge_base, load_local_documents
+from devmate.rag import (
+    DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_CHUNK_SIZE,
+    build_knowledge_base,
+    load_local_documents,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +39,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Delete the existing Chroma persist directory before indexing.",
     )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=DEFAULT_CHUNK_SIZE,
+        help="Maximum characters per chunk.",
+    )
+    parser.add_argument(
+        "--chunk-overlap",
+        type=int,
+        default=DEFAULT_CHUNK_OVERLAP,
+        help="Character overlap used for oversized chunk splitting.",
+    )
+    parser.add_argument(
+        "--manifest",
+        default=None,
+        help="Optional corpus manifest JSONL/JSON path used for metadata and signature.",
+    )
 
     return parser.parse_args()
 
@@ -46,11 +67,12 @@ def main() -> None:
     docs_dir = Path(args.docs_dir)
     persist_dir = Path(args.persist_dir)
 
-    if args.reset and persist_dir.exists():
-        LOGGER.info("Removing existing Chroma vector store at %s.", persist_dir)
-        shutil.rmtree(persist_dir)
-
-    documents = load_local_documents(docs_dir)
+    documents = load_local_documents(
+        docs_dir,
+        chunk_size=args.chunk_size,
+        chunk_overlap=args.chunk_overlap,
+        manifest_path=args.manifest,
+    )
 
     if not documents:
         LOGGER.error("No documents found in %s.", docs_dir)
@@ -61,6 +83,10 @@ def main() -> None:
         config=config,
         docs_dir=docs_dir,
         persist_dir=persist_dir,
+        chunk_size=args.chunk_size,
+        chunk_overlap=args.chunk_overlap,
+        manifest_path=args.manifest,
+        reset=args.reset,
     )
 
     LOGGER.info(
