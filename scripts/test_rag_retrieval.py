@@ -193,7 +193,8 @@ def _keyword_groups(
             isinstance(entry, str) for entry in group
         ):
             raise ValueError(
-                f"Eval case {index} keyword group {group_index} must be a list of strings."
+                f"Eval case {index} keyword group {group_index} "
+                "must be a list of strings."
             )
         cleaned = tuple(entry for entry in group if entry)
         if cleaned:
@@ -325,12 +326,18 @@ def _log_keyword_result(result: QuestionResult) -> None:
     case = result.case
     if case.expected_keywords_all:
         if result.all_ok:
-            LOGGER.info("    keywords (all): PASS (%s)", ", ".join(result.matched_all))
+            LOGGER.info(
+                "    keywords (all): PASS (%s)",
+                ", ".join(result.matched_all),
+            )
         else:
             LOGGER.warning("    keywords (all): WARN missing %s", result.missing_all)
     if case.expected_keywords_any:
         if result.any_ok:
-            LOGGER.info("    keywords (any): PASS (%s)", ", ".join(result.matched_any))
+            LOGGER.info(
+                "    keywords (any): PASS (%s)",
+                ", ".join(result.matched_any),
+            )
         else:
             LOGGER.warning(
                 "    keywords (any): WARN none of %s matched",
@@ -343,10 +350,16 @@ def _log_keyword_result(result: QuestionResult) -> None:
             else []
         )
         if matched:
-            LOGGER.info("    keyword group %d: PASS (%s)", number, ", ".join(matched))
+            LOGGER.info(
+                "    keyword group %d: PASS (%s)",
+                number,
+                ", ".join(matched),
+            )
         else:
             LOGGER.warning(
-                "    keyword group %d: WARN none of %s matched", number, list(group)
+                "    keyword group %d: WARN none of %s matched",
+                number,
+                list(group),
             )
 
 

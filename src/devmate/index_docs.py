@@ -54,7 +54,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--manifest",
         default=None,
-        help="Optional corpus manifest JSONL/JSON path used for metadata and signature.",
+        help=(
+            "Optional corpus manifest JSONL/JSON path used for metadata and signature."
+        ),
     )
 
     return parser.parse_args()

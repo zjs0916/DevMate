@@ -333,7 +333,9 @@ DevMate> exit
 除了交互模式，也可以使用单次 query：
 
 ```bash
-PYTHONPATH=src uv run python -m devmate.main --config config.local.toml "请构建一个展示附近徒步路线的网站项目，必须创建项目文件，使用 uv，不要使用 requirements.txt。"
+PYTHONPATH=src uv run python -m devmate.main \
+    --config config.local.toml \
+    "请构建一个展示附近徒步路线的网站项目，必须创建项目文件，使用 uv，不要使用 requirements.txt。"
 ```
 
 不过项目展示时更推荐交互模式，因为它更能体现 Agent 的连续任务执行能力。
@@ -416,7 +418,10 @@ cp config.docker.example.toml config.docker.toml
 DEVMATE_CONFIG=config.docker.toml docker compose run --rm devmate
 ```
 
-`config.docker.example.toml` 提供了默认（FastEmbed）和 Ollama 两种 embedding 的配置示例。如果切换为 Ollama，需要将 embedding 地址改为 `http://host.docker.internal:11434`，因为 Docker 容器内的 `127.0.0.1` 指向容器自身，不是 Mac 本机。
+`config.docker.example.toml` 提供了默认（FastEmbed）和 Ollama 两种
+embedding 的配置示例。如果切换为 Ollama，需要将 embedding 地址改为
+`http://host.docker.internal:11434`，因为 Docker 容器内的 `127.0.0.1`
+指向容器自身，不是 Mac 本机。
 
 Docker Compose 的重点是：
 
@@ -427,9 +432,11 @@ Docker Compose 的重点是：
   `mcp-search` 连接（`DEVMATE_MCP_HOST=mcp-search`）
 * 支持 `DEVMATE_CONFIG` 环境变量覆盖配置文件路径（所有服务共享同一份 config）
 
-**注意：** Docker Compose 负责启动 `mcp-search`、`preprocess-corpus`、`index-docs` 和 `devmate`。
-在 Docker 环境中，preview 会自动启动 uvicorn 并返回 URL，但不会尝试打开宿主机浏览器（容器无法控制宿主机）。
-如需访问生成的网站，需要将 Docker 容器端口映射到宿主机，或使用本地运行模式（自动打开浏览器仅在本地模式下有效）。
+**注意：** Docker Compose 负责启动 `mcp-search`、`preprocess-corpus`、
+`index-docs` 和 `devmate`。在 Docker 环境中，preview 会自动启动 uvicorn
+并返回 URL，但不会尝试打开宿主机浏览器（容器无法控制宿主机）。
+如需访问生成的网站，需要将 Docker 容器端口映射到宿主机，或使用本地运行模式
+（自动打开浏览器仅在本地模式下有效）。
 
 ---
 
@@ -532,7 +539,10 @@ rag_eval/corpus/
 rag_eval/corpus_manifest.jsonl
 ```
 
-预处理规则是确定性的：编码容错读取、去 BOM、统一换行、去不可见控制字符、压缩多余空行；PDF 使用 `pypdf` 抽取文本并做通用页码/重复页眉页脚清理。脚本不翻译、不总结、不改写正文，也不会把文件改成固定标准名。`.md` 和 `.pdf` 会输出为同 stem 的 `.txt`；如果输出文件名冲突，会追加稳定短 hash。
+预处理规则是确定性的：编码容错读取、去 BOM、统一换行、去不可见控制字符、
+压缩多余空行；PDF 使用 `pypdf` 抽取文本并做通用页码/重复页眉页脚清理。
+脚本不翻译、不总结、不改写正文，也不会把文件改成固定标准名。`.md` 和
+`.pdf` 会输出为同 stem 的 `.txt`；如果输出文件名冲突，会追加稳定短 hash。
 
 常用参数：
 
@@ -560,7 +570,9 @@ PYTHONPATH=src uv run python -m devmate.index_docs \
     --reset
 ```
 
-`--reset` 会先删除旧索引，避免旧 Chroma metadata、chunk 参数或 embedding 维度残留。索引签名记录 embedding provider、model、dimensions、chunk 参数和 corpus manifest hash；这些输入变化后应重建索引。
+`--reset` 会先删除旧索引，避免旧 Chroma metadata、chunk 参数或 embedding
+维度残留。索引签名记录 embedding provider、model、dimensions、chunk 参数和
+corpus manifest hash；这些输入变化后应重建索引。
 
 ---
 
@@ -593,13 +605,18 @@ Eval case 支持：
 * `expected_keywords_any`：至少出现一个关键词。
 * `expected_keyword_groups`：AND-of-ORs，每组至少命中一个关键词。
 
-检索失败或 source 检查失败会返回非 0。关键词缺失默认是 warning；加 `--strict-keywords` 后会返回非 0。示例 eval cases 可以引用本地示例数据集，例如中文小说文本或规则手册 PDF；用户也可以为任意 corpus 提供自己的 `eval_cases.json`。
+检索失败或 source 检查失败会返回非 0。关键词缺失默认是 warning；加
+`--strict-keywords` 后会返回非 0。示例 eval cases 可以引用本地示例数据集，
+例如中文小说文本或规则手册 PDF；用户也可以为任意 corpus 提供自己的
+`eval_cases.json`。
 
 ---
 
 ## Multilingual note
 
-默认 FastEmbed `BAAI/bge-small-en-v1.5` 轻量、易部署，适合英文项目文档和一般 coding docs。中文或多语言 corpus 建议使用多语言 embedding，例如 Ollama `bge-m3`（常见 1024 维）。这是模型选择问题，不是针对某个数据集的补丁。
+默认 FastEmbed `BAAI/bge-small-en-v1.5` 轻量、易部署，适合英文项目文档和
+一般 coding docs。中文或多语言 corpus 建议使用多语言 embedding，例如
+Ollama `bge-m3`（常见 1024 维）。这是模型选择问题，不是针对某个数据集的补丁。
 
 切换 embedding provider、model 或 dimensions 后必须重建索引：
 

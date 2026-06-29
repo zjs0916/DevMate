@@ -43,7 +43,10 @@ services:
         - CMD
         - python
         - -c
-        - "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(('127.0.0.1',8765))==0 else 1)"
+        - >-
+          import socket,sys;
+          s=socket.socket();
+          sys.exit(0 if s.connect_ex(('127.0.0.1',8765))==0 else 1)
       interval: 5s
       timeout: 3s
       retries: 12
@@ -101,4 +104,12 @@ services:
         condition: service_completed_successfully
     stdin_open: true
     tty: true
-    command: uv run python -m devmate.main --config ${DEVMATE_CONFIG:-config.docker.toml} --interactive
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - devmate.main
+      - --config
+      - ${DEVMATE_CONFIG:-config.docker.toml}
+      - --interactive

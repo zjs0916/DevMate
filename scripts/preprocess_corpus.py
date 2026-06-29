@@ -368,7 +368,11 @@ def _clean_pdf_pages(pages: list[str]) -> tuple[str, list[PageSpan]]:
         output_lines.extend(kept_lines)
         end_line = len(output_lines)
         page_spans.append(
-            PageSpan(page=page_number, start_line=start_line, end_line=end_line)
+            PageSpan(
+                page=page_number,
+                start_line=start_line,
+                end_line=end_line,
+            )
         )
 
     text = _clean_text("\n".join(output_lines))

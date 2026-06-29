@@ -190,7 +190,12 @@ def load_local_documents(
                 chunk_index,
                 manifest_record=manifest_record,
             )
-            documents.append(Document(page_content=chunk, metadata=metadata))
+            documents.append(
+                Document(
+                    page_content=chunk,
+                    metadata=metadata,
+                )
+            )
 
     return documents
 
