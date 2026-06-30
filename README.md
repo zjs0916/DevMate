@@ -607,8 +607,11 @@ Eval case 支持：
 
 检索失败或 source 检查失败会返回非 0。关键词缺失默认是 warning；加
 `--strict-keywords` 后会返回非 0。示例 eval cases 可以引用本地示例数据集，
-例如中文小说文本或规则手册 PDF；用户也可以为任意 corpus 提供自己的
+例如中文小说文本或规则手册 PDF；用户也可以为新 corpus 提供自己的
 `eval_cases.json`。
+
+DevMate 的 preprocessing pipeline 是通用的 txt/md/pdf 文档处理流程；
+`rag_eval/eval_cases.example.json` 只是示例评测集。实际生产使用时应根据新数据集补充自己的 eval cases，并根据语言和领域选择合适 embedding 模型。
 
 ---
 
@@ -880,7 +883,7 @@ __pycache__/
 git status
 git check-ignore -v config.local.toml
 git check-ignore -v config.docker.toml
-git grep -n "sk-\|api_key\|deepseek\|tavily\|langchain_api_key"
+git grep -n "s[k]-\|t[v]ly-\|l[s]v2_\|api_key\|deepseek\|tavily\|langchain_api_key"
 ```
 
 如果 `git grep` 搜到真实 API key，需要删除并重新生成 key。
